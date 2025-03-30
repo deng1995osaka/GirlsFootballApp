@@ -78,26 +78,28 @@ const PhoneLogin = ({ navigation }) => {
       setLoading(true);
       
       if (verificationCode === serverCode) {
-        // 验证成功后，创建或更新用户记录
-        const { data: { user }, error: authError } = await supabase.auth.signUp({
+        // 使用 signInWithPassword 而不是 signUp
+        const { data, error: authError } = await supabase.auth.signInWithPassword({
           phone: phone,
-          password: serverCode // 使用验证码作为临时密码
+          password: verificationCode
         });
 
         if (authError) throw authError;
 
-        // 创建用户档案
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert([
-            {
-              id: user.id,
-              phone: phone,
-              updated_at: new Date()
-            }
-          ]);
+        // 如果用户不存在，创建用户档案
+        if (data.user) {
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .upsert([
+              {
+                id: data.user.id,
+                phone: phone,
+                updated_at: new Date()
+              }
+            ], { onConflict: 'id' });
 
-        if (profileError) throw profileError;
+          if (profileError) throw profileError;
+        }
 
         navigation.replace('Tabs');
       } else {

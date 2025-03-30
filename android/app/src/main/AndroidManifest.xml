@@ -27,7 +27,6 @@
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="girlsfootball"/>
         <data android:scheme="com.anonymous.GirlsFootballApp"/>
-        <data android:scheme="exp+girlsfootballapp"/>
       </intent-filter>
       <intent-filter data-generated="true">
         <action android:name="android.intent.action.VIEW"/>
