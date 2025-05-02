@@ -1,25 +1,32 @@
+import { Text as RNText } from 'react-native';
+
+const ProxyText = (props) => {
+  const appliedStyle = Array.isArray(props.style)
+    ? Object.assign({}, ...props.style)
+    : props.style || {};
+
+  const actualFont = appliedStyle.fontFamily || Text.defaultProps?.style?.fontFamily || '未指定';
+  const contentText = typeof props.children === 'string' ? props.children : '【组件嵌套】';
+
+  console.log(`🕵️ Text渲染: "${contentText}" → 字体: ${actualFont}`);
+
+  return <RNText {...props} />;
+};
+
+global.Text = ProxyText;
+
+console.log('🔥 JS 启动了！');
+console.log("👉 AppRegistry 注册开始");
+
 import { AppRegistry } from 'react-native';
 import App from './App';
-import appConfig from './app.json';
+import { name as appName } from './app.json';
 
-console.log("index.js 正在加载...");
+console.log("📦 app.json 中 name:", appName);
 
-try {
-  const appName = "main"; // 确保这是字符串 "main"
-  console.log("从 app.json 读取的根组件名称:", appConfig?.expo?.name);
+AppRegistry.registerComponent(appName, () => App);
 
-  if (appName !== appConfig?.expo?.name) {
-    console.error(
-      `错误：app.json 中的 name 属性与注册名称不一致。app.json: ${appConfig?.expo?.name}, 注册名: ${appName}`
-    );
-  }
-
-  console.log("尝试注册根组件...");
-  AppRegistry.registerComponent("main", () => App);
-  console.log("根组件注册成功！");
-} catch (error) {
-  console.error("注册组件失败:", error);
-}
+console.log("✅ AppRegistry 注册完成！");
 
 try {
   console.log("检查是否正确导入 App 组件...");

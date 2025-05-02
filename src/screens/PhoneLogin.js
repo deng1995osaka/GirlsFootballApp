@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   Alert,
   KeyboardAvoidingView,
@@ -9,14 +8,26 @@ import {
   Image,
   TextInput,
   SafeAreaView,
+  TouchableOpacity,
+  ActivityIndicator,
+  StatusBar,
+  ScrollView,
+  Keyboard
 } from 'react-native';
-import { colors, fonts, typography } from '../styles/main';
-import { normalize, wp, hp } from '../utils/responsive';
-import { supabase } from '../lib/supabase';
-import Background from '../components/Background';
-import FormInput from '../components/FormInput';
-import PixelButton from '../components/PixelButton';
-import { sendSmsCode } from '../services/smsService';
+import { colors, fonts, typography } from '@styles/main';
+import { normalize, wp, hp } from '@utils/responsive';
+import { supabase } from '@lib/supabase';
+import Background from '@components/Background';
+import FormInput from '@components/FormInput';
+import PixelButton from '@components/PixelButton';
+import { sendSmsCode } from '@services/smsService';
+import AppText from '@components/AppText';
+import { SafeAreaView as SafeAreaViewRN } from 'react-native-safe-area-context';
+import { createUserProfile } from '@services/userService';
+import { DEFAULT_PROFILE } from '@config/profileDefaults';
+
+// 判断是否为生产环境
+const isProduction = !__DEV__;  // 在 Xcode Release 构建时会自动设置为 true
 
 const PhoneLogin = ({ navigation }) => {
   const [phone, setPhone] = useState('');
@@ -43,8 +54,22 @@ const PhoneLogin = ({ navigation }) => {
       const code = Math.random().toString().slice(-6);
       setServerCode(code);
 
-      // 只在生产环境发送真实短信
-      if (!__DEV__) {
+      // 根据环境区分处理方式
+      if (!isProduction) {
+        // 开发环境：直接显示验证码
+        setCodeSent(true);
+        console.log('开发环境验证码:', code);
+        Alert.alert(
+          '测试模式',
+          `当前环境: ${isProduction ? '生产' : '开发'}\n测试验证码: ${code}`,
+          [{ text: '确定', onPress: () => console.log('验证码已显示') }]
+        );
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // 生产环境：发送真实短信
         const result = await sendSmsCode(phone, code);
         console.log('短信发送结果:', result);
 
@@ -54,17 +79,15 @@ const PhoneLogin = ({ navigation }) => {
         } else {
           throw new Error(result.body?.message || '发送失败');
         }
-      } else {
-        // 开发环境下直接显示验证码
-        setCodeSent(true);
-        console.log('开发环境验证码:', code);
-        Alert.alert('测试验证码', `验证码: ${code}`);
+      } catch (error) {
+        console.error('发送验证码失败:', error);
+        Alert.alert('发送失败', error.message || '请稍后重试');
+      } finally {
+        setLoading(false);
       }
     } catch (error) {
       console.error('发送验证码失败:', error);
       Alert.alert('发送失败', error.message || '请稍后重试');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -88,17 +111,24 @@ const PhoneLogin = ({ navigation }) => {
 
         // 如果用户不存在，创建用户档案
         if (data.user) {
-          const { error: profileError } = await supabase
+          const { data: profile, error: profileError } = await supabase
             .from('profiles')
-            .upsert([
-              {
-                id: data.user.id,
-                phone: phone,
-                updated_at: new Date()
-              }
-            ], { onConflict: 'id' });
+            .select()
+            .eq('id', data.user.id)
+            .single();
 
-          if (profileError) throw profileError;
+          if (profileError || !profile) {
+            const { error: createError } = await createUserProfile({
+              id: data.user.id,
+              ...DEFAULT_PROFILE,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+            if (createError) {
+              console.error('创建用户档案失败:', createError);
+              // 继续执行，不阻止用户登录
+            }
+          }
         }
 
         navigation.replace('Tabs');
@@ -115,7 +145,7 @@ const PhoneLogin = ({ navigation }) => {
 
   return (
     <Background>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaViewRN style={styles.safeArea}>
         <KeyboardAvoidingView 
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.container}
@@ -131,11 +161,11 @@ const PhoneLogin = ({ navigation }) => {
               </View>
 
               <View style={styles.titleContainer}>
-                <Text style={styles.title}>★短信登录★</Text>
+                <AppText style={styles.title}>★短信登录★</AppText>
               </View>
 
               <View style={styles.inputContainer}>
-                <Text style={styles.prefix}>+86</Text>
+                <AppText style={styles.prefix}>+86</AppText>
                 <TextInput
                   style={styles.input}
                   value={phone}
@@ -171,12 +201,13 @@ const PhoneLogin = ({ navigation }) => {
                   title="☞返回登录"
                   onPress={() => navigation.navigate('Login')}
                   variant="underline"
+                  status="default"
                 />
               </View>
             </View>
           </View>
         </KeyboardAvoidingView>
-      </SafeAreaView>
+      </SafeAreaViewRN>
     </Background>
   );
 };

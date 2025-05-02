@@ -1,11 +1,20 @@
 import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import { DEFAULT_PROFILE } from '../config/profileDefaults';
+import { 
+  EXPO_PUBLIC_SUPABASE_URL as supabaseUrl, 
+  EXPO_PUBLIC_SUPABASE_ANON_KEY as supabaseKey 
+} from '@env';
 
-const supabaseUrl = 'https://sfgcrobnxslmdhnzwhhm.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmZ2Nyb2JueHNsbWRobnp3aGhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYyMTc1NTQsImV4cCI6MjA1MTc5MzU1NH0.YCICSnFZNlEjmTFf5jvjdMnv3oaIKp1RLElxTN1YTBA';
-
-export const supabase = createClient(supabaseUrl, supabaseKey);
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    storage: AsyncStorage,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+  },
+});
 
 // 修改测试函数
 export const testSupabaseConnection = async () => {
@@ -124,7 +133,6 @@ export const checkUserProfile = async (userId) => {
     if (error) throw error;
     return { hasProfile: !!data };
   } catch (error) {
-    console.error('检查用户 profile 失败:', error);
     return { hasProfile: false };
   }
 };
@@ -132,23 +140,25 @@ export const checkUserProfile = async (userId) => {
 // 新增：创建用户 profile
 export const createUserProfile = async (profileData) => {
   try {
-    console.log('createUserProfile 开始执行，数据:', profileData);
-    
+    const sanitizedData = {
+      ...profileData,
+      positions: Array.isArray(profileData.positions) 
+        ? profileData.positions.map(pos => typeof pos === 'string' ? parseInt(pos, 10) : pos)
+        : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    };
+
     const { data, error } = await supabase
       .from('profiles')
-      .insert([profileData])
+      .upsert([sanitizedData])
       .select()
       .single();
 
     if (error) {
-      console.error('Supabase insert 错误:', error);
       throw error;
     }
 
-    console.log('createUserProfile 执行成功，返回数据:', data);
     return { data, error: null };
   } catch (error) {
-    console.error('createUserProfile 执行失败:', error);
     return { 
       data: null, 
       error: new Error('创建用户资料失败，请重试') 

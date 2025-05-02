@@ -1,148 +1,145 @@
-import React, { useState } from 'react';
-import { 
-  SafeAreaView, 
-  ScrollView, 
-  View, 
-  Text,
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  TextInput,
   TouchableOpacity,
+  StyleSheet,
+  ScrollView,
   Alert,
+  ActivityIndicator,
+  Platform,
+  KeyboardAvoidingView,
+  Keyboard,
+  TouchableWithoutFeedback
 } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { supabase } from '@lib/supabase';
+import { newsService } from '@services/newsService';
+import AppText from '@components/AppText';
+import FormInput from '@components/FormInput';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { colors, typography, fonts } from '@styles/main';
+import { normalize, wp, hp } from '@utils/responsive';
+import { commonScreenStyles } from '@styles/screenStyles';
+import { useProfileCheck } from '@hooks/useProfileCheck';
+import Toast from 'react-native-toast-message';
+import ImageUploadBox from '@components/ImageUploadBox';
+import Background from '@components/Background';
 import * as FileSystem from 'expo-file-system';
-import { supabase } from '../lib/supabase';
-import { commonScreenStyles } from '../styles/screenStyles';
-import FormInput from '../components/FormInput';
-import ImageUploadBox from '../components/ImageUploadBox';
 
-export default function CreateNewsScreen({ navigation, route }) {
-  const newsData = route.params?.newsData;
-  const isEditing = route.params?.isEditing;
+const CreateNewsScreen = () => {
+  const navigation = useNavigation();
+  const route = useRoute();
+  const isEditing = route.params?.newsData !== undefined;
+  const initialData = isEditing ? route.params.newsData : null;
+  const { checkProfile } = useProfileCheck(navigation, false);
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [focusedInput, setFocusedInput] = useState(null);
   const [formData, setFormData] = useState({
-    title: newsData?.title || '',
-    content: newsData?.content || '',
-    image: newsData?.image_url || '',
+    title: initialData?.title || '',
+    content: initialData?.content || '',
+    image: initialData?.image_url || null
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [focusedInput, setFocusedInput] = useState(null);
+  const [errors, setErrors] = useState({
+    title: false,
+    content: false
   });
 
-  const handleInputChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const uploadImage = async (uri, userId) => {
-    try {
-      console.log('开始上传图片:', uri);
-      
-      // 1. 验证文件
-      const fileInfo = await FileSystem.getInfoAsync(uri);
-      if (!fileInfo.exists) {
-        throw new Error('文件不存在');
-      }
-
-      // 2. 生成文件路径
-      const timestamp = Date.now();
-      const path = `${userId}/${timestamp}_news.jpg`;
-      
-      // 3. 准备上传数据
-      const formDataObj = new FormData();
-      formDataObj.append('file', {
-        uri: uri,
-        type: 'image/jpeg',
-        name: 'news.jpg'
-      });
-
-      // 4. 获取 session
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      // 5. 上传到 Supabase Storage
-      const { data, error } = await supabase.storage
-        .from('news')  // 确保这里使用正确的 bucket 名称
-        .upload(path, formDataObj, {
-          contentType: 'image/jpeg',
-          upsert: false
-        });
-
-      if (error) throw error;
-
-      // 6. 获取公开URL - 修改这里
-      const { data: { publicUrl } } = supabase.storage
-        .from('news')
-        .getPublicUrl(path);
-
-      console.log('上传成功，publicUrl:', publicUrl); // 添加日志
-      return publicUrl;
-
-    } catch (error) {
-      console.error('图片上传失败:', error);
-      throw error;
-    }
+  const validateForm = () => {
+    const newErrors = {
+      title: !formData.title.trim(),
+      content: !formData.content.trim()
+    };
+    setErrors(newErrors);
+    return !Object.values(newErrors).some(error => error);
   };
 
   const handleSubmit = async () => {
     try {
-      setIsSubmitting(true);
-      if (!formData.title.trim() || !formData.content.trim()) {
-        Alert.alert('提示', '请填写标题和内容');
-        return;
-      }
+      if (!validateForm()) return;
 
-      const { data: { session } } = await supabase.auth.getSession();
+      setSubmitting(true);
+
+      // 获取当前用户
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !session) {
-        Alert.alert('错误', '请先登录');
+      if (!user) {
+        Toast.show({
+          type: 'error',
+          text1: '错误',
+          text2: '请先登录',
+          visibilityTime: 2000,
+          autoHide: true,
+          position: 'top',
+        });
         return;
       }
 
+      // 处理图片上传
       let imageUrl = formData.image;
-      if (formData.image && !formData.image.startsWith('http')) {
-        imageUrl = await uploadImage(formData.image, user.id);
+      if (imageUrl && typeof imageUrl !== 'string') {
+        try {
+          imageUrl = await newsService.uploadNewsImage(formData.image);
+        } catch (error) {
+          console.error('图片上传失败:', error);
+          Toast.show({
+            type: 'error',
+            text1: '错误',
+            text2: '图片上传失败，请重试',
+            visibilityTime: 2000,
+            autoHide: true,
+            position: 'top',
+          });
+          setSubmitting(false);
+          return;
+        }
       }
 
+      // 准备小报数据
       const newsData = {
         title: formData.title.trim(),
         content: formData.content.trim(),
         image_url: imageUrl,
-        updated_at: new Date().toISOString(),
+        created_by: user.id,
+        updated_at: new Date().toISOString()
       };
 
-      let error;
+      // 创建或更新小报
       if (isEditing) {
-        // 更新现有新闻
-        const { error: updateError } = await supabase
-          .from('news')
-          .update(newsData)
-          .eq('id', route.params.newsData.id);
-        error = updateError;
+        await newsService.updateNews(route.params.newsData.id, newsData);
+        Toast.show({
+          type: 'success',
+          text1: '成功',
+          text2: '小报更新成功！',
+          visibilityTime: 2000,
+          autoHide: true,
+          position: 'top',
+        });
+        navigation.goBack();
       } else {
-        // 创建新新闻
-        const { error: insertError } = await supabase
-          .from('news')
-          .insert([{
-            ...newsData,
-            created_by: user.id,
-            created_at: new Date().toISOString(),
-          }]);
-        error = insertError;
+        await newsService.createNews(newsData);
+        Toast.show({
+          type: 'success',
+          text1: '成功',
+          text2: '小报发布成功！',
+          visibilityTime: 2000,
+          autoHide: true,
+          position: 'top',
+        });
+        navigation.goBack();
       }
-
-      if (error) throw error;
-
-      Alert.alert('成功', isEditing ? '小报更新成功！' : '小报发布成功！', [
-        {
-          text: '确定',
-          onPress: () => {
-            if (route.params?.onNewsCreated) {
-              route.params.onNewsCreated();
-            }
-            navigation.goBack();
-          }
-        }
-      ]);
-
     } catch (error) {
-      Alert.alert('错误', error.message);
+      console.error('提交小报失败:', error);
+      Toast.show({
+        type: 'error',
+        text1: '错误',
+        text2: error.message || '提交失败，请重试',
+        visibilityTime: 2000,
+        autoHide: true,
+        position: 'top',
+      });
     } finally {
-      setIsSubmitting(false);
+      setSubmitting(false);
     }
   };
 
@@ -153,57 +150,163 @@ export default function CreateNewsScreen({ navigation, route }) {
           style={commonScreenStyles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={commonScreenStyles.backButtonText}>←</Text>
+          <AppText style={commonScreenStyles.backButtonText}>←</AppText>
         </TouchableOpacity>
-        <Text style={commonScreenStyles.headerTitle}>
+        <AppText style={commonScreenStyles.headerTitle}>
           {isEditing ? '编辑小报' : '发小报'}
-        </Text>
+        </AppText>
       </View>
 
-      <ScrollView style={commonScreenStyles.mainContent}>
-        <View style={commonScreenStyles.formContainer}>
-          <FormInput
-            label=""
-            value={formData.title}
-            onChangeText={(text) => handleInputChange('title', text)}
-            placeholder="输入标题"
-            isFocused={focusedInput === 'title'}
-            onFocus={() => setFocusedInput('title')}
-            onBlur={() => setFocusedInput(null)}
-          />
-
-          <FormInput
-            label=""
-            value={formData.content}
-            onChangeText={(text) => handleInputChange('content', text)}
-            placeholder="输入正文"
-            multiline
-            isFocused={focusedInput === 'content'}
-            onFocus={() => setFocusedInput('content')}
-            onBlur={() => setFocusedInput(null)}
-          />
-
-          <ImageUploadBox
-            text="图片"
-            label=""
-            hasImage={!!formData.image}
-            onImageSelected={(uri) => handleInputChange('image', uri)}
-            value={formData.image}
-          />
-        </View>
-      </ScrollView>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <ScrollView 
+            style={commonScreenStyles.mainContent}
+            contentContainerStyle={{ paddingBottom: hp(0) }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={commonScreenStyles.formContainer}>
+              <FormInput
+                label=""
+                value={formData.title}
+                onChangeText={(text) => {
+                  setFormData(prev => ({ ...prev, title: text }));
+                  if (errors.title) {
+                    setErrors(prev => ({ ...prev, title: false }));
+                  }
+                }}
+                placeholder="标题"
+                onFocus={() => setFocusedInput('title')}
+                onBlur={() => setFocusedInput(null)}
+                isValid={false}
+                style={errors.title && styles.inputError}
+                marginBottom={0}
+              />
+              {errors.title && (
+                <AppText style={styles.errorText}>请输入标题</AppText>
+              )}
+              
+              <View style={styles.contentContainer}>
+                <Background backgroundType="grid">
+                  <TextInput
+                    style={[
+                      styles.contentInput,
+                      errors.content && styles.inputError
+                    ]}
+                    placeholder="正文"
+                    value={formData.content}
+                    onChangeText={(text) => {
+                      setFormData(prev => ({ ...prev, content: text }));
+                      if (errors.content) {
+                        setErrors(prev => ({ ...prev, content: false }));
+                      }
+                    }}
+                    multiline
+                    textAlignVertical="top"
+                    placeholderTextColor={colors.textSecondary}
+                    onFocus={() => setFocusedInput('content')}
+                    onBlur={() => setFocusedInput(null)}
+                    returnKeyType="done"
+                    onSubmitEditing={Keyboard.dismiss}
+                  />
+                </Background>
+              </View>
+              {errors.content && (
+                <AppText style={styles.errorText}>请输入内容</AppText>
+              )}
+              
+              <ImageUploadBox 
+                text="图片"
+                label=""
+                hasImage={!!formData.image}
+                onImageSelected={(image) => {
+                  if (!image) return;
+                  setFormData(prev => ({ ...prev, image }));
+                }}
+                value={typeof formData.image === 'string' ? formData.image : formData.image?.uri}
+              />
+              
+              {submitting && (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <AppText style={styles.loadingText}>正在保存...</AppText>
+                </View>
+              )}
+            </View>
+          </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
 
       <View style={commonScreenStyles.submitContainer}>
         <TouchableOpacity
           style={commonScreenStyles.submitButton}
           onPress={handleSubmit}
-          disabled={isSubmitting}
+          disabled={submitting}
         >
-          <Text style={commonScreenStyles.submitButtonText}>
-            {isSubmitting ? '发布中...' : '发小报'}
-          </Text>
+          <AppText style={commonScreenStyles.submitButtonText}>
+            {submitting ? '发布中...' : '发小报'}
+          </AppText>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
-}
+};
+
+const styles = StyleSheet.create({
+  titleInput: {
+    fontSize: typography.size.lg,
+    color: colors.textPrimary,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingVertical: wp(2),
+    marginBottom: wp(2),
+    fontFamily: fonts.pixel,
+  },
+  contentContainer: {
+    position: 'relative',
+    marginTop: hp(2),
+    marginBottom: hp(2),
+    height: hp(40),
+    overflow: 'hidden',
+    borderColor: colors.line,
+    borderWidth: 1,
+  },
+  contentInput: {
+    ...typography.body,
+    padding: wp(3),
+    height: '100%',
+    textAlignVertical: 'top',
+  },
+  inputError: {
+    borderColor: colors.error,
+    borderBottomColor: colors.error,
+  },
+  errorText: {
+    color: colors.error,
+    fontSize: typography.size.sm,
+    fontFamily: fonts.pixel,
+    marginBottom: wp(2),
+  },
+  loadingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: wp(2),
+    color: colors.textPrimary,
+    fontSize: typography.size.md,
+    fontFamily: fonts.pixel,
+  },
+});
+
+export default CreateNewsScreen;

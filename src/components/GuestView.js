@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { colors, fonts, typography } from '../styles/main';
-import { wp, hp } from '../utils/responsive';
-import BorderBox from './BorderBox';
-import PixelButton from './PixelButton';
+import { View, StyleSheet } from 'react-native';
+import AppText from '@components/AppText';
+import { colors, fonts, typography } from '@styles/main';
+import { normalize, wp, hp } from '@utils/responsive';
+import BorderBox from '@components/BorderBox';
+import PixelButton from '@components/PixelButton';
 
 const GuestView = ({ navigation }) => {
   return (
@@ -13,14 +14,14 @@ const GuestView = ({ navigation }) => {
         iconSource={require('../../assets/icons/kickoff.png')}
       >
         <View>
-          <Text style={styles.title}>还没有你的 PLAYER 档案，</Text>
-          <Text style={[styles.title, styles.secondLine]}>快来创建吧！</Text>
+          <AppText style={styles.title}>还没有你的·PLAYER·档案，</AppText>
+          <AppText style={[styles.title, styles.secondLine]}>快来创建吧！</AppText>
         </View>
         
         <View style={styles.featureList}>
-          <Text style={styles.feature}>☞ 创建自己的 PLAYER 档案</Text>
-          <Text style={styles.feature}>☞ 加入球队</Text>
-          <Text style={styles.feature}>☞ 发布球星小报</Text>
+          <AppText style={styles.feature}>☞ 创建自己的·PLAYER·档案</AppText>
+          <AppText style={styles.feature}>☞ 加入球队</AppText>
+          <AppText style={styles.feature}>☞ 发布球星小报</AppText>
         </View>
 
         <PixelButton

@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
-  Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
@@ -10,28 +9,41 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
-  SafeAreaView,
   StatusBar,
+  ScrollView,
+  Keyboard,
+  TouchableWithoutFeedback
 } from 'react-native';
-import { colors, fonts, typography } from '../styles/main';
-import { normalize, wp, hp } from '../utils/responsive';
-import { supabase } from '../lib/supabase';
-import Background from '../components/Background';
-import Header from '../components/Header';
-import FormInput from '../components/FormInput';
-import PixelButton from '../components/PixelButton';
-import { testSupabaseConnection, signUpUser, handleLogin, checkUserProfile } from '../lib/supabase';
-import BorderBox from '../components/BorderBox';
-import { commonScreenStyles } from '../styles/screenStyles';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { colors, fonts, typography } from '@styles/main';
+import { normalize, wp, hp } from '@utils/responsive';
+import { supabase } from '@lib/supabase';
+import Background from '@components/Background';
+import Header from '@components/Header';
+import FormInput from '@components/FormInput';
+import PixelButton from '@components/PixelButton';
+import { testSupabaseConnection, signUpUser, handleLogin, checkUserProfile, createUserProfile } from '@lib/supabase';
+import BorderBox from '@components/BorderBox';
+import { commonScreenStyles } from '@styles/screenStyles';
+import AppText from '@components/AppText';
+import { DEFAULT_PROFILE } from '@config/profileDefaults';
+import Toast from 'react-native-toast-message';
 
-const LoginScreen = ({ navigation }) => {
-  const [email, setEmail] = useState('');
+const LoginScreen = ({ route, navigation }) => {
+  const [email, setEmail] = useState(route.params?.email || '');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState('login'); // 'login' 或 'register'
+  const [error, setError] = useState('');
+  const isFirstLogin = route.params?.isFirstLogin;
+  const [focusedInput, setFocusedInput] = useState(null);
+  const [errors, setErrors] = useState({
+    email: false,
+    password: false
+  });
 
   const handleEmailChange = (text) => {
-    setEmail(text);
+    setEmail(text.trim());
   };
 
   const handlePasswordChange = (text) => {
@@ -47,31 +59,111 @@ const LoginScreen = ({ navigation }) => {
     return password.length >= 6;
   };
 
-  const handleLoginPress = async () => {
-    if (!email || !password) {
-      Alert.alert('提示', '请输入邮箱和密码');
-      return;
+  const validateForm = () => {
+    const newErrors = {
+      email: !email.trim(),
+      password: !password.trim()
+    };
+    
+    if (email.trim() && !validateEmail(email)) {
+      newErrors.email = true;
     }
+    
+    if (password.trim() && password.length < 6) {
+      newErrors.password = true;
+    }
+    
+    setErrors(newErrors);
+    return !Object.values(newErrors).some(error => error);
+  };
 
+  const handleLoginPress = async () => {
+    if (loading) return;
+    
     try {
+      // 验证表单
+      if (!validateForm()) {
+        return;
+      }
+      
       setLoading(true);
+      
       const { data, error } = await handleLogin(email, password);
-
+      
       if (error) {
         if (error.message === 'Invalid login credentials') {
-          Alert.alert('登录失败', '邮箱或密码不正确。如果你是新用户，请确保已经验证了邮箱。');
+          Toast.show({
+            type: 'error',
+            text1: '登录失败',
+            text2: '邮箱或密码不正确。如果你是新用户，请确保已经验证了邮箱。',
+            visibilityTime: 3000,
+            autoHide: true,
+            position: 'top',
+          });
         } else {
-          Alert.alert('登录失败', error.message);
+          Toast.show({
+            type: 'error',
+            text1: '登录失败',
+            text2: error.message,
+            visibilityTime: 3000,
+            autoHide: true,
+            position: 'top',
+          });
         }
         return;
       }
-
+      
       if (data?.user) {
-        // 直接进入主页
+        // 检查并创建 profile
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          // 先检查 profile 是否存在
+          const { data: existingProfile, error: checkError } = await supabase
+            .from('profiles')
+            .select()
+            .eq('id', user.id)
+            .single();
+
+          if (checkError && checkError.code !== 'PGRST116') { // PGRST116 是"未找到记录"的错误码
+            console.error('检查 profile 失败:', checkError);
+          } else if (!existingProfile) {
+            // 只有在 profile 不存在时才创建
+            const { error: profileError } = await supabase
+              .from('profiles')
+              .upsert([{ 
+                id: user.id, 
+                ...DEFAULT_PROFILE 
+              }])
+              .select()
+              .single();
+
+            if (profileError) {
+              console.error('创建 profile 失败:', profileError);
+              // 继续执行，不阻止用户进入主页
+            }
+          }
+        }
+
+        Toast.show({
+          type: 'success',
+          text1: '成功',
+          text2: '登录成功',
+          visibilityTime: 2000,
+          autoHide: true,
+          position: 'top',
+        });
         navigation.replace('Tabs');
       }
     } catch (error) {
-      Alert.alert('错误', '登录过程中发生错误');
+      console.error('登录失败:', error);
+      Toast.show({
+        type: 'error',
+        text1: '错误',
+        text2: error.message || '登录失败，请重试',
+        visibilityTime: 2000,
+        autoHide: true,
+        position: 'top',
+      });
     } finally {
       setLoading(false);
     }
@@ -95,17 +187,31 @@ const LoginScreen = ({ navigation }) => {
 
     try {
       setLoading(true);
-      const { data, error } = await signUpUser(email, password);
+      const { data: signUpData, error: signUpError } = await signUpUser(email, password);
 
-      if (error) {
-        Alert.alert('注册失败', error.message);
+      if (signUpError) {
+        Toast.show({
+          type: 'error',
+          text1: '注册失败',
+          text2: signUpError.message,
+          visibilityTime: 3000,
+          autoHide: true,
+          position: 'top',
+        });
         return;
       }
 
-      // 注册成功后直接导航到验证页面
+      // 直接导航到验证页面
       navigation.replace('EmailVerification', { email });
     } catch (error) {
-      Alert.alert('错误', '注册过程中发生错误，请稍后重试');
+      Toast.show({
+        type: 'error',
+        text1: '错误',
+        text2: '注册过程中发生错误，请稍后重试',
+        visibilityTime: 3000,
+        autoHide: true,
+        position: 'top',
+      });
     } finally {
       setLoading(false);
     }
@@ -118,16 +224,18 @@ const LoginScreen = ({ navigation }) => {
   return (
     <Background>
       <StatusBar barStyle="dark-content" backgroundColor="white" />
-      <View style={{ backgroundColor: 'white' }}>
+      <View style={{ backgroundColor: 'white', zIndex: 1 }}>
         <SafeAreaView style={{ backgroundColor: 'white' }}>
           <View style={commonScreenStyles.headerContainer}>
             <TouchableOpacity 
               style={commonScreenStyles.backButton}
               onPress={() => navigation.goBack()}
             >
-              <Text style={commonScreenStyles.backButtonText}>←</Text>
+              <AppText style={commonScreenStyles.backButtonText}>←</AppText>
             </TouchableOpacity>
-            <Text style={commonScreenStyles.headerTitle}>{mode === 'login' ? '登录' : '注册'}</Text>
+            <AppText style={commonScreenStyles.headerTitle}>
+              {isFirstLogin ? '首次登录' : '登录'}
+            </AppText>
           </View>
         </SafeAreaView>
       </View>
@@ -135,55 +243,95 @@ const LoginScreen = ({ navigation }) => {
         <KeyboardAvoidingView 
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.container}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
         >
-          <BorderBox
-            iconSource={require('../../assets/icons/shoot.png')}
-          >
-            <View style={styles.content}>
-              <View style={styles.titleContainer}>
-                <Text style={styles.title}>{mode === 'login' ? '★登录★' : '★注册★'}</Text>
-              </View>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={{ flex: 1 }}>
+              <BorderBox
+                iconSource={require('../../assets/icons/shoot.png')}
+              >
+                <View style={styles.content}>
+                  <View style={styles.titleContainer}>
+                    <AppText style={styles.title}>{mode === 'login' ? '★登录★' : '★注册新账号★'}</AppText>
+                  </View>
 
-              <FormInput
-                value={email}
-                onChangeText={handleEmailChange}
-                placeholder="邮箱地址"
-                autoCapitalize="none"
-                keyboardType="email-address"
-                editable={!loading}
-                isValid={validateEmail(email)}
-              />
+                  {error && (
+                    <AppText style={styles.errorText}>{error}</AppText>
+                  )}
 
-              <FormInput
-                value={password}
-                onChangeText={handlePasswordChange}
-                placeholder="密码"
-                secureTextEntry
-                editable={!loading}
-                isValid={validatePassword(password)}
-              />
+                  <FormInput
+                    value={email}
+                    onChangeText={handleEmailChange}
+                    placeholder="邮箱地址"
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    editable={!loading}
+                    isValid={validateEmail(email)}
+                    style={[
+                      errors.email && styles.inputError
+                    ]}
+                    onFocus={() => setFocusedInput('email')}
+                    onBlur={() => setFocusedInput(null)}
+                  />
+                  {errors.email && (
+                    <AppText style={styles.errorText}>
+                      {email.trim() ? '请输入有效的邮箱地址' : '请输入邮箱'}
+                    </AppText>
+                  )}
 
-              <PixelButton
-                title={loading ? '加载中...' : (mode === 'login' ? '登录' : '注册')}
-                onPress={mode === 'login' ? handleLoginPress : handleRegister}
-                disabled={loading}
-                style={styles.submitButton}
-              />
+                  <FormInput
+                    value={password}
+                    onChangeText={handlePasswordChange}
+                    placeholder="密码"
+                    secureTextEntry
+                    editable={!loading}
+                    isValid={validatePassword(password)}
+                    style={[
+                      errors.password && styles.inputError
+                    ]}
+                    onFocus={() => setFocusedInput('password')}
+                    onBlur={() => setFocusedInput(null)}
+                  />
+                  {errors.password && (
+                    <AppText style={styles.errorText}>
+                      {password.trim() ? '密码长度至少需要6位' : '请输入密码'}
+                    </AppText>
+                  )}
 
-              <View style={styles.linkButtonsContainer}>
-                <PixelButton
-                  title="☞使用短信登录"
-                  onPress={() => navigation.navigate('PhoneLogin')}
-                  variant="underline"
-                />
-                <PixelButton
-                  title="☞注册新账号"
-                  onPress={() => navigation.navigate('Register')}
-                  variant="underline"
-                />
-              </View>
+                  <PixelButton
+                    title={loading ? "加载中..." : (mode === 'login' ? '登录' : '注册')}
+                    onPress={mode === 'login' ? handleLoginPress : handleRegister}
+                    disabled={loading}
+                    style={styles.submitButton}
+                  />
+
+                  <View style={styles.linkButtonsContainer}>
+                    <PixelButton
+                      title="使用短信登录↩"
+                      onPress={() => navigation.navigate('PhoneLogin')}
+                      variant="underline"
+                      status="default"
+                    />
+                    {mode === 'login' ? (
+                      <PixelButton
+                        title="注册新账号↩"
+                        onPress={() => setMode('register')}
+                        variant="underline"
+                        status="default"
+                      />
+                    ) : (
+                      <PixelButton
+                        title="返回登录↩"
+                        onPress={() => setMode('login')}
+                        variant="underline"
+                        status="default"
+                      />
+                    )}
+                  </View>
+                </View>
+              </BorderBox>
             </View>
-          </BorderBox>
+          </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </Background>
@@ -228,6 +376,13 @@ const styles = StyleSheet.create({
     marginBottom: hp(5),
     alignItems: 'flex-start',
     gap: hp(2),
+  },
+  errorText: {
+    color: 'red',
+    marginBottom: hp(2),
+  },
+  inputError: {
+    borderColor: colors.error,
   },
 });
 

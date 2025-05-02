@@ -1,71 +1,90 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Pressable } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { Portal } from '@gorhom/portal';
-import { normalize, wp, hp } from '../utils/responsive';
-import { colors, fonts } from '../styles/main';
+import AppText from '@components/AppText';
+import { normalize, wp, hp } from '@utils/responsive';
+import { colors, fonts, typography } from '@styles/main';
 
-const DropdownMenu = ({ visible, onSelect, items, position = 'right', anchor, edgeDistance }) => {
-  if (!visible) return null;
+export default function DropdownMenu({ items, onSelect, visible, anchor, edgeDistance, onClose, position = 'right' }) {
+  console.log('🔍 DropdownMenu - 渲染:', { visible, anchor, items, position });
+  
+  if (!visible || !anchor) {
+    console.log('🔍 DropdownMenu - 不显示菜单:', { visible, anchor });
+    return null;
+  }
 
-  // 计算下拉菜单的位置
-  const getDropdownPosition = () => {
-    if (!anchor) return {};
-    
-    return {
-      position: 'absolute',
-      top: anchor.y + anchor.height,
-      [position]: anchor.x,
-    };
+  const handleOverlayPress = () => {
+    console.log('🔍 DropdownMenu - 点击覆盖层');
+    if (onClose) {
+      onClose();
+    }
+  };
+
+  const screenWidth = Dimensions.get('window').width;
+  const menuWidth = wp(35); // 菜单宽度
+
+  // 根据position计算left值
+  const calculateLeft = () => {
+    if (position === 'left') {
+      return edgeDistance;
+    } else {
+      // 如果是right定位，则从屏幕右边减去菜单宽度和边距
+      return screenWidth - menuWidth - edgeDistance;
+    }
   };
 
   return (
     <Portal>
-      <Pressable 
-        style={StyleSheet.absoluteFill} 
-        onPress={() => onSelect(null)}
+      <TouchableOpacity 
+        style={styles.overlay}
+        activeOpacity={1}
+        onPress={handleOverlayPress}
       >
-        <View 
-          style={[
-            styles.dropdown,
-            getDropdownPosition(),
-            position === 'left' && { left: edgeDistance || wp(4) },
-            position === 'right' && { right: edgeDistance || wp(4) },
-          ]}
-        >
-          {items.map((item, index) => (
-            <TouchableOpacity 
+        <View style={[
+          styles.menu,
+          {
+            position: 'absolute',
+            top: anchor.y + anchor.height,
+            left: calculateLeft(),
+            width: menuWidth
+          }
+        ]}>
+          {items.map((item) => (
+            <TouchableOpacity
               key={item.id}
               style={[
-                styles.dropdownItem,
-                index === items.length - 1 && styles.lastItem,
-                item.danger && styles.dropdownItemDanger
+                styles.menuItem,
+                item.danger && styles.dangerItem
               ]}
-              onPress={(e) => {
-                e.stopPropagation();
+              onPress={() => {
+                console.log('🔍 DropdownMenu - 选择菜单项:', item.id);
                 onSelect(item.id);
               }}
             >
-              <Text style={[
-                styles.dropdownText,
-                item.danger && styles.dropdownTextDanger
+              <AppText style={[
+                styles.itemText,
+                item.danger && styles.dangerText
               ]}>
                 {item.label}
-              </Text>
+              </AppText>
             </TouchableOpacity>
           ))}
         </View>
-      </Pressable>
+      </TouchableOpacity>
     </Portal>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  dropdown: {
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
+  },
+  menu: {
     backgroundColor: colors.bgWhite,
     borderRadius: wp(2),
     borderWidth: 1,
     borderColor: colors.border,
-    width: wp(35),
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -74,29 +93,23 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
-    zIndex: 1000,
   },
-  dropdownItem: {
+  menuItem: {
     paddingVertical: hp(1.5),
     paddingHorizontal: wp(4),
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  lastItem: {
+  dangerItem: {
     borderBottomWidth: 0,
   },
-  dropdownItemDanger: {
-    borderBottomWidth: 0,
-  },
-  dropdownText: {
+  itemText: {
     fontSize: normalize(16),
     color: colors.textPrimary,
     fontFamily: fonts.pixel,
     textAlign: 'center',
   },
-  dropdownTextDanger: {
+  dangerText: {
     color: colors.error,
   },
-});
-
-export default DropdownMenu; 
+}); 

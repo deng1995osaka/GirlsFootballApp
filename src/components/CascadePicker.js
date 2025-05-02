@@ -1,20 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Modal, 
   View, 
-  Text, 
   TouchableOpacity, 
   StyleSheet, 
-  ScrollView,
-  Dimensions
+  ScrollView
 } from 'react-native';
-import { colors, typography, fonts } from '../styles/main';
-import { wp, hp } from '../utils/responsive';
+import AppText from '@components/AppText';
+import { colors, fonts, typography } from '@styles/main';
+import { normalize, wp, hp } from '@utils/responsive';
+import { LOCAL_REGIONS } from '@config/regions';
+import { teamsStore } from '@store/teamsStore';
+import BottomSheet from '@components/BottomSheet';
 
 const CascadePicker = ({ visible, onClose, onSelect, regions, title, showTeams = false }) => {
   const [selectedRegion, setSelectedRegion] = useState(null);
   const [selectedCity, setSelectedCity] = useState(null);
   const [step, setStep] = useState(1); // 1: 选择地区, 2: 选择城市, 3: 选择球队
+  const [cityTeams, setCityTeams] = useState([]);
+  const [teamsList, setTeamsList] = useState([]);
+
+  useEffect(() => {
+    if (visible && regions.length === 0) {
+      console.log('⚠️ Warning: regions is empty on open');
+    }
+  }, [visible, regions]);
+
+  useEffect(() => {
+    if (visible && showTeams) {
+      loadTeamsList();
+    }
+  }, [visible, showTeams]);
+
+  const loadTeamsList = async () => {
+    try {
+      const teams = await teamsStore.getTeamsList();
+      setTeamsList(teams);
+    } catch (error) {
+      console.error('加载球队列表失败:', error);
+    }
+  };
 
   const handleRegionSelect = (region) => {
     setSelectedRegion(region);
@@ -31,7 +55,14 @@ const CascadePicker = ({ visible, onClose, onSelect, regions, title, showTeams =
       resetAndClose();
     } else {
       setSelectedCity(city);
-      setStep(3);
+      const teams = teamsList.filter(team => 
+        team.region === selectedRegion.name && team.city === city
+      );
+      console.log('🔍 CascadePicker - teams for city:', city, teams);
+      setCityTeams(teams);
+      setTimeout(() => {
+        setStep(3);
+      }, 0);
     }
   };
 
@@ -44,6 +75,7 @@ const CascadePicker = ({ visible, onClose, onSelect, regions, title, showTeams =
     setStep(1);
     setSelectedRegion(null);
     setSelectedCity(null);
+    setCityTeams([]);
     onClose();
   };
 
@@ -51,6 +83,7 @@ const CascadePicker = ({ visible, onClose, onSelect, regions, title, showTeams =
     if (step === 3) {
       setStep(2);
       setSelectedCity(null);
+      setCityTeams([]);
     } else if (step === 2) {
       setStep(1);
       setSelectedRegion(null);
@@ -64,13 +97,13 @@ const CascadePicker = ({ visible, onClose, onSelect, regions, title, showTeams =
       case 1:
         return (
           <ScrollView style={styles.cityList}>
-            {regions.map((region) => (
+            {LOCAL_REGIONS.map((region) => (
               <TouchableOpacity
                 key={`region-${region.name}`}
                 style={styles.item}
                 onPress={() => handleRegionSelect(region)}
               >
-                <Text style={styles.itemText}>{region.name}</Text>
+                <AppText style={styles.itemText}>{region.name}</AppText>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -84,7 +117,7 @@ const CascadePicker = ({ visible, onClose, onSelect, regions, title, showTeams =
                 style={styles.item}
                 onPress={() => handleCitySelect(city)}
               >
-                <Text style={styles.itemText}>{city}</Text>
+                <AppText style={styles.itemText}>{city}</AppText>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -92,16 +125,23 @@ const CascadePicker = ({ visible, onClose, onSelect, regions, title, showTeams =
       case 3:
         return (
           <ScrollView style={styles.cityList}>
-            {selectedRegion?.teams?.[selectedCity]?.map((team) => (
+            {Array.isArray(cityTeams) && cityTeams.length === 0 && (
+              <View style={styles.item}>
+                <AppText style={[styles.itemText, { color: colors.textSecondary }]}>暂无球队</AppText>
+              </View>
+            )}
+            {Array.isArray(cityTeams) && cityTeams.length > 0 && cityTeams.map((team) => (
               <TouchableOpacity
                 key={`team-${team.team_id}`}
                 style={styles.item}
                 onPress={() => handleTeamSelect({
                   team_id: team.team_id,
-                  name: team.name
+                  name: team.name,
+                  region: selectedRegion.name,
+                  city: selectedCity
                 })}
               >
-                <Text style={styles.itemText}>{team.name}</Text>
+                <AppText style={styles.itemText}>{team.name}</AppText>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -110,140 +150,34 @@ const CascadePicker = ({ visible, onClose, onSelect, regions, title, showTeams =
   };
 
   return (
-    <Modal
+    <BottomSheet
       visible={visible}
-      transparent={true}
-      animationType="slide"
-      onRequestClose={handleBack}
-      statusBarTranslucent={true}
-    >
-      <View style={styles.modalOverlay}>
-        <TouchableOpacity 
-          style={styles.backdropTouchable}
-          activeOpacity={1}
-          onPress={handleBack}
-        >
-          <View style={styles.modalContainer}>
-            <TouchableOpacity 
-              activeOpacity={1}
-              onPress={e => e.stopPropagation()}
-              style={styles.modalContent}
-            >
-              <View style={styles.header}>
-                <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-                  <Text style={styles.backButtonText}>←</Text>
-                </TouchableOpacity>
-                <Text style={styles.title}>
-                  {step === 1 ? title : 
-                   step === 2 ? selectedRegion?.name : 
-                   selectedCity}
-                </Text>
-                <TouchableOpacity onPress={resetAndClose} style={styles.closeButton}>
-                  <Text style={styles.closeButtonText}>×</Text>
-                </TouchableOpacity>
-              </View>
-              
-              {renderContent()}
-            </TouchableOpacity>
-          </View>
+      title={title}
+      onClose={handleBack}
+    
+      headerLeft={
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+          <AppText style={styles.backButtonText}>←</AppText>
         </TouchableOpacity>
-      </View>
-    </Modal>
+      }
+      contentStyle={styles.content}
+    >
+      {renderContent()}
+    </BottomSheet>
   );
 };
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 1000,
-  },
-  backdropTouchable: {
-    flex: 1,
-  },
-  modalContainer: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    position: 'relative',
-    zIndex: 1001,
-  },
-  modalContent: {
-    backgroundColor: colors.bgWhite,
-    borderTopLeftRadius: wp(4),
-    borderTopRightRadius: wp(4),
-    maxHeight: SCREEN_HEIGHT * 0.8,
-    position: 'relative',
-    zIndex: 1002,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: -2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  content: {
     padding: wp(4),
-    borderBottomWidth: 1,
-    borderBottomColor: colors.line,
-  },
-  title: {
-    fontSize: typography.size.base,
-    fontFamily: fonts.pixel,
-    color: colors.textPrimary,
-  },
-  closeButton: {
-    padding: wp(2),
-    marginRight: -wp(2),
-  },
-  closeButtonText: {
-    fontSize: typography.size.xl,
-    color: colors.textSecondary,
-    lineHeight: typography.size.xl,
+    
   },
   cityList: {
-    padding: wp(4),
-  },
-  regionContainer: {
-    marginBottom: hp(3),
-  },
-  regionTitle: {
-    fontSize: typography.size.sm,
-    color: colors.textLight,
-    marginBottom: hp(1),
-    fontFamily: fonts.pixel,
-  },
-  citiesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -wp(2),
-  },
-  cityItem: {
-    paddingVertical: hp(1.5),
-    paddingHorizontal: wp(3),
-    marginHorizontal: wp(2),
-    marginVertical: hp(0.5),
-    backgroundColor: colors.bgLight,
-    borderRadius: wp(2),
-  },
-  cityText: {
-    fontSize: typography.size.base,
-    color: colors.textPrimary,
-    fontFamily: fonts.pixel,
+    padding: wp(0),
   },
   item: {
-    padding: wp(4),
+    paddingBottom: hp(2),
+    paddingTop: hp(3),
     borderBottomWidth: 1,
     borderBottomColor: colors.line,
   },
@@ -252,12 +186,9 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontFamily: fonts.pixel,
   },
-  backButton: {
-    padding: wp(2),
-  },
   backButtonText: {
     fontSize: typography.size.xl,
-    color: colors.textSecondary,
+    color: colors.textPrimary,
   },
 });
 

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, Image, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Image, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, fonts, typography, layout } from '../styles/main';
-import { normalize, wp, hp } from '../utils/responsive';
-import Background from '../components/Background';
-import { newsStore } from '../store';
-import { supabase } from '../lib/supabase';
+import AppText from '@components/AppText';
+import { colors, fonts, typography, layout } from '@styles/main';
+import { normalize, wp, hp } from '@utils/responsive';
+import Background from '@components/Background';
+import { newsStore } from '@store';
+import { supabase } from '@lib/supabase';
 
 const NewsDetailScreen = ({ navigation, route }) => {
     const { newsId } = route.params;
@@ -70,11 +71,11 @@ const NewsDetailScreen = ({ navigation, route }) => {
                             style={styles.backButton}
                             onPress={() => navigation.goBack()}
                         >
-                            <Text style={styles.backButtonText}>←</Text>
+                            <AppText style={styles.backButtonText}>←</AppText>
                         </TouchableOpacity>
                     </View>
                     <View style={styles.errorContainer}>
-                        <Text style={styles.errorText}>{error || '新闻不存在'}</Text>
+                        <AppText style={styles.errorText}>{error || '新闻不存在'}</AppText>
                     </View>
                 </SafeAreaView>
             </Background>
@@ -89,23 +90,23 @@ const NewsDetailScreen = ({ navigation, route }) => {
                         style={styles.backButton}
                         onPress={() => navigation.goBack()}
                     >
-                        <Text style={styles.backButtonText}>←</Text>
+                        <AppText style={styles.backButtonText}>←</AppText>
                     </TouchableOpacity>
                 </View>
 
                 <ScrollView style={styles.content}>
                     <View style={styles.contentContainer}>
-                        <Text style={styles.newsTitle}>{news.title}</Text>
-                        <Text style={styles.newsAuthor}>◈{news.profiles?.nickname || '匿名'}◈</Text>
+                        <AppText style={styles.newsTitle}>{news.title}</AppText>
+                        <AppText style={styles.newsAuthor}>◈{news.profiles?.nickname || '匿名'}◈</AppText>
                         
                         {news.summary && (
-                            <Text style={styles.newsSummary}>{'　　' + news.summary}</Text>
+                            <AppText style={styles.newsSummary}>{'　　' + news.summary}</AppText>
                         )}
                         
                         {/* 图片区域 */}
                         {imageError || !news.image_url ? (
                             <View style={styles.placeholderImage}>
-                                <Text style={styles.placeholderText}>◇ 图片未加载 ◇</Text>
+                                <AppText style={styles.placeholderText}>◇ 图片未加载 ◇</AppText>
                             </View>
                         ) : (
                             <Image 
@@ -127,21 +128,21 @@ const NewsDetailScreen = ({ navigation, route }) => {
                             {news.content.split('\n')
                                 .filter(p => p.trim())
                                 .map((paragraph, index) => (
-                                    <Text key={index} style={styles.paragraph}>
+                                    <AppText key={index} style={styles.paragraph}>
                                         {'　　' + paragraph}
-                                    </Text>
+                                    </AppText>
                                 ))
                             }
                         </View>
                         
                         {news.created_at && (
-                            <Text style={styles.newsFooter}>
+                            <AppText style={styles.newsFooter}>
                                 最后更新于：{new Date(news.created_at).toLocaleDateString('zh-CN', {
                                     year: 'numeric',
                                     month: 'long',
                                     day: 'numeric'
                                 })}
-                            </Text>
+                            </AppText>
                         )}
                     </View>
                 </ScrollView>

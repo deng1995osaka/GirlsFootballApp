@@ -1,17 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   View, 
   TouchableOpacity, 
-  Text, 
   StyleSheet, 
   Image,
-  Alert 
+  Alert,
+  Platform
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
-import { colors, fonts, typography } from '../styles/main';
-import { wp, hp } from '../utils/responsive';
-import UniformRenderer from './UniformRenderer';
+import { colors, fonts, typography } from '@styles/main';
+import { normalize, wp, hp } from '@utils/responsive';
+import UniformRenderer from '@components/UniformRenderer';
+import AppText from '@components/AppText';
 
 export default function ImageUploadBox({ 
   style, 
@@ -60,37 +61,45 @@ export default function ImageUploadBox({
 
   const handlePress = async () => {
     if (customUpload) {
-      // 如果是自定义上传，直接调用回调
+      console.log('使用自定义上传');
       onImageSelected();
       return;
     }
 
     try {
-      // 原有的图片选择逻辑
+      console.log('开始请求相册权限...');
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      console.log('权限状态:', status);
+      
       if (status !== 'granted') {
         Alert.alert('需要权限', '请允许访问相册以选择图片');
         return;
       }
 
-      // 选择图片
+      console.log('开始选择图片...');
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 1,
+        quality: 0.5,  // 降低初始质量到0.5
       });
+      console.log('图片选择结果:', result);
 
       if (!result.canceled && result.assets && result.assets[0]) {
         const asset = result.assets[0];
+        console.log('选中的图片:', asset);
         
         try {
-          // 处理图片
+          console.log('开始处理图片...');
           const processedImage = await processImage(asset.uri);
-          onImageSelected(processedImage.uri);
+          console.log('图片处理完成:', processedImage);
+          onImageSelected(processedImage);
         } catch (error) {
+          console.error('处理图片失败:', error);
           Alert.alert('错误', error.message);
         }
+      } else {
+        console.log('用户取消选择或未选择图片');
       }
     } catch (error) {
       console.error('选择图片错误:', error);
@@ -100,46 +109,45 @@ export default function ImageUploadBox({
 
   return (
     <View style={styles.section}>
-      <TouchableOpacity 
-        style={[styles.container, style]} 
-        onPress={handlePress}
-      >
-        {value ? (
-          <View style={styles.imageWrapper}>
-            {isUniform ? (
-              <>
-                <View style={styles.uniformContainer}>
-                  {[1, 2, 3].map((_, index) => (
+      <View style={[styles.dashedBorder, style]}>
+        <TouchableOpacity 
+          style={styles.container} 
+          onPress={handlePress}
+        >
+          {value ? (
+            <View style={styles.imageWrapper}>
+              {isUniform ? (
+                <>
+                  <View style={styles.uniformContainer}>
                     <UniformRenderer 
-                      key={index}
                       pixels={typeof value === 'string' ? JSON.parse(value).pixels : value.pixels}
                       style={styles.uniformPreview}
                     />
-                  ))}
-                </View>
-                <View style={styles.overlay}>
-                  <Text style={styles.overlayText}>重新设计{text}</Text>
-                </View>
-              </>
-            ) : (
-              <>
-                <Image 
-                  source={{ uri: value }} 
-                  style={styles.thumbnail}
-                  resizeMode="cover"
-                />
-                <View style={styles.overlay}>
-                  <Text style={styles.overlayText}>更换{text}</Text>
-                </View>
-              </>
-            )}
-          </View>
-        ) : (
-          <Text style={styles.text}>
-            {isUniform ? `设计${text}` : (hasImage ? `更换${text}` : `上传${text}`)}
-          </Text>
-        )}
-      </TouchableOpacity>
+                  </View>
+                  <View style={styles.overlay}>
+                    <AppText style={styles.overlayText}>重新设计{text}</AppText>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Image 
+                    source={{ uri: value }} 
+                    style={styles.thumbnail}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.overlay}>
+                    <AppText style={styles.overlayText}>更换{text}</AppText>
+                  </View>
+                </>
+              )}
+            </View>
+          ) : (
+            <AppText style={styles.text}>
+              {isUniform ? `设计${text}` : (hasImage ? `更换${text}` : `上传${text}`)}
+            </AppText>
+          )}
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -148,16 +156,18 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: hp(2),
   },
+  dashedBorder: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: wp(0),
+    borderStyle: 'dashed',
+  },
   container: {
     height: hp(15),
     backgroundColor: colors.bgWhite,
-    borderRadius: wp(0),
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
-    overflow: 'visible',
+    overflow: 'hidden',
   },
   imageWrapper: {
     width: '100%',
@@ -196,7 +206,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   uniformPreview: {
-    width: '30%',  // 这样每个队服图案占据容器宽度的30%
-    height: '100%',
+    width: '100%',  // 填满容器宽度
+    height: '100%', // 填满容器高度
   },
 });

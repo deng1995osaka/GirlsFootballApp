@@ -1,48 +1,96 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { colors, fonts, typography, layout } from '../styles/main';
-import { normalize, wp, hp } from '../utils/responsive';
-import PlayerCard from '../components/PlayerCard';
-import PixelCard from '../components/PixelCard';
-import TeamCard from '../components/TeamCard';
-import Header from '../components/Header';
-import PixelButton from '../components/PixelButton';
-import Background from '../components/Background';
-import GuestView from '../components/GuestView';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { colors, fonts, typography, layout } from '@styles/main';
+import { normalize, wp, hp } from '@utils/responsive';
+import PlayerCard from '@components/PlayerCard';
+import PixelCard from '@components/PixelCard';
+import TeamCard from '@components/TeamCard';
+import Header from '@components/Header';
+import PixelButton from '@components/PixelButton';
+import Background from '@components/Background';
+import GuestView from '@components/GuestView';
 import { useNavigation } from '@react-navigation/native';
-import { profileService } from '../services/profileService';
-import { authService } from '../services/authService';
-import { supabase, checkUserProfile } from '../lib/supabase';
-import TabContent from '../components/TabContent';
+import { profileService } from '@services/profileService';
+import { authService } from '@services/authService';
+import { supabase, checkUserProfile } from '@lib/supabase';
+import TabContent from '@components/TabContent';
+import AppText from '@components/AppText';
+import { teamsStore } from '@store/teamsStore';
+import { newsStore } from '@store/newsStore';
+import { userStore } from '@store/userStore';
+import ActionListSheet from '@components/ActionListSheet';
+import { DEFAULT_PROFILE } from '@config/profileDefaults';
+import { useProfileCheck } from '@hooks/useProfileCheck';
 
-const ProfileScreen = ({ navigation }) => {
+const ProfileScreen = ({ navigation, route }) => {
   const [activeTab, setActiveTab] = useState('我的小报');
-  const [profileData, setProfileData] = useState({
-    nickname: '未设置昵称',
-    number: '',
-    positions: [],
-    team: null,
-    avatar_url: null,
-    news_count: 0,
-    team_count: 0
-  });
+  const [profileData, setProfileData] = useState(DEFAULT_PROFILE);
   const [newsCount, setNewsCount] = useState(0);
   const [teamsCount, setTeamsCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isGuest, setIsGuest] = useState(true);
+  const [actionSheetVisible, setActionSheetVisible] = useState(false);
+  const { checkProfile } = useProfileCheck(navigation);
+  const refreshInterval = useRef(null);
+  
+  // 添加菜单相关的 ref
+  const menuButtonRef = useRef(null);
 
   useEffect(() => {
     checkAuthAndLoadProfile();
+
+    return () => {
+      // 清理 profile 订阅
+      if (window.profileSubscription) {
+        window.profileSubscription.unsubscribe();
+        window.profileSubscription = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      checkAuthAndLoadProfile();
+      if (route.params?.shouldRefresh) {
+        console.log('👀 检测到来自编辑页的刷新指令');
+        checkAuthAndLoadProfile(); // 重新加载资料
+      }
     });
 
     return unsubscribe;
-  }, [navigation]);
+  }, [navigation, route]);
+
+  useEffect(() => {
+    // 每55分钟刷新一次头像URL
+    refreshInterval.current = setInterval(async () => {
+      if (!isGuest) {
+        try {
+          const data = await profileService.getProfile();
+          setProfileData(prev => ({
+            ...prev,
+            avatar_url: data.avatar_url
+          }));
+        } catch (error) {
+          console.error('刷新头像URL失败:', error);
+        }
+      }
+    }, 55 * 60 * 1000); // 55分钟
+
+    return () => {
+      if (refreshInterval.current) {
+        clearInterval(refreshInterval.current);
+      }
+    };
+  }, [isGuest]);
+
+  useEffect(() => {
+    if (route.params?.shouldRefresh) {
+      loadProfile();
+      // 清除刷新标记
+      navigation.setParams({ shouldRefresh: false });
+    }
+  }, [route.params?.shouldRefresh]);
 
   const checkAuthAndLoadProfile = async () => {
     try {
@@ -57,6 +105,23 @@ const ProfileScreen = ({ navigation }) => {
       
       setIsGuest(false);
       await loadProfile();
+
+      // 订阅用户资料变更
+      const profileSubscription = supabase
+        .channel('public:profiles')
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${session.data.session.user.id}`
+        }, payload => {
+          console.log('✅ 监听到用户资料变更: ', payload);
+          loadProfile(); // 自动刷新
+        })
+        .subscribe();
+
+      // 保存订阅引用以便后续清理
+      window.profileSubscription = profileSubscription;
       
     } catch (err) {
       setError('初始化失败，请重试');
@@ -69,34 +134,26 @@ const ProfileScreen = ({ navigation }) => {
     try {
       const data = await profileService.getProfile();
       
-      const defaultValues = {
-        nickname: '神秘球员',
-        number: '99',
-        positions: ['CF'],
-        team_id: null,
-        avatar_url: null,
-        news_count: 0,
-        team_count: 0,
-        team: {
-          name: '女孩踢球FC',
-          logo_url: null
-        }
-      };
+      console.log('🔍 ProfileScreen - loadProfile 原始数据:', data);
 
       if (!data) {
-        setProfileData(defaultValues);
+        console.log('⚠️ ProfileScreen - 没有获取到 profile 数据，使用默认值');
+        setProfileData(DEFAULT_PROFILE);
         return;
       }
 
       const processedData = {
+        ...DEFAULT_PROFILE,
         ...data,
-        nickname: data.nickname || defaultValues.nickname,
-        number: data.number || defaultValues.number,
-        positions: data.positions || defaultValues.positions,
-        avatar_url: data.avatar_url || defaultValues.avatar_url,
-        news_count: data.news_count || defaultValues.news_count,
-        team_count: data.team_count || defaultValues.team_count
+        nickname: data.nickname || DEFAULT_PROFILE.nickname,
+        jersey_number: data.jersey_number || DEFAULT_PROFILE.jersey_number,
+        positions: data.positions || DEFAULT_PROFILE.positions,
+        avatar_url: data.avatar_url || DEFAULT_PROFILE.avatar_url,
+        news_count: data.news_count || DEFAULT_PROFILE.news_count,
+        team_count: data.team_count || DEFAULT_PROFILE.team_count
       };
+
+      console.log('🔍 ProfileScreen - 处理后的 profile 数据:', processedData);
 
       if (data.team_id) {
         const { data: teamData, error: teamError } = await supabase
@@ -110,30 +167,19 @@ const ProfileScreen = ({ navigation }) => {
         setProfileData({
           ...processedData,
           team: {
-            name: teamData?.name || defaultValues.team.name,
-            logo_url: teamData?.logo_url || defaultValues.team.logo_url
+            name: teamData?.name || DEFAULT_PROFILE.team.name,
+            logo_url: teamData?.logo_url || DEFAULT_PROFILE.team.logo_url
           }
         });
       } else {
         setProfileData({
           ...processedData,
-          team: defaultValues.team
+          team: DEFAULT_PROFILE.team
         });
       }
     } catch (err) {
-      setProfileData({
-        nickname: '神秘球员',
-        number: '00',
-        positions: ['CF'],
-        team_id: null,
-        avatar_url: null,
-        news_count: 0,
-        team_count: 0,
-        team: {
-          name: '未加入球队',
-          logo_url: null
-        }
-      });
+      console.error('加载用户档案失败:', err);
+      setProfileData(DEFAULT_PROFILE);
     }
   };
 
@@ -146,66 +192,27 @@ const ProfileScreen = ({ navigation }) => {
   };
 
   const handleMenuAction = async (action) => {
+    console.log('🔍 ProfileScreen - handleMenuAction:', action);
     if (action === 'logout') {
       try {
-        await authService.signOut();
+        console.log('🔍 ProfileScreen - 开始退出登录');
+        const result = await authService.signOut();
+        console.log('🔍 ProfileScreen - 退出登录结果:', result);
         setIsGuest(true);
+        // 退出后导航到登录页面
+        navigation.replace('Login');
       } catch (error) {
         console.error('退出登录失败:', error);
+        Alert.alert('错误', '退出登录失败，请重试');
       }
-    } else if (action === 'delete') {
-      Alert.alert(
-        '确认删除',
-        '确定要删除账号吗？此操作不可恢复。',
-        [
-          {
-            text: '取消',
-            style: 'cancel',
-          },
-          {
-            text: '确定删除',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await authService.deleteAccount();
-                setIsGuest(true);
-              } catch (error) {
-                console.error('删除账号失败:', error);
-                Alert.alert('错误', '删除账号失败，请重试');
-              }
-            },
-          },
-        ]
-      );
     }
-  };
-
-  const renderTabContent = () => {
-    if (activeTab === '我的小报') {
-      return (
-        <View style={styles.newsCard}>
-          <Text style={styles.placeholderText}>还没有发过小报...</Text>
-          <PixelButton 
-            title="☞发小报"
-            variant="underline"
-            onPress={() => navigation.navigate('CreateNews')}
-          />
-        </View>
-      );
-    }
-    
-    return <TeamCard 
-      key={profileData?.team_id?.toString() || Math.random().toString()}
-      team={profileData}
-      showMenuButton={true}
-    />;
   };
 
   const renderContent = () => {
     if (error) {
       return (
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
+          <AppText style={styles.errorText}>{error}</AppText>
           <PixelButton 
             title="重试"
             onPress={checkAuthAndLoadProfile}
@@ -219,62 +226,74 @@ const ProfileScreen = ({ navigation }) => {
     }
 
     return (
-      <ScrollView>
-        <View style={styles.cardsContainer}>
-          <View style={styles.cardWrapper}>
-            <PlayerCard 
-              nickname={profileData.nickname}
-              teamName={profileData.team?.name || '未加入球队'}
-              avatarUrl={profileData.avatar_url}
-              teamLogoUrl={profileData.team?.logo_url}
+      <View style={styles.container}>
+        <ScrollView>
+          <View style={styles.cardsContainer}>
+            <View style={styles.cardWrapper}>
+              {console.log('🔍 ProfileScreen - 传递给 PlayerCard 的数据:', {
+                nickname: profileData.nickname,
+                teamName: typeof profileData.team?.name === 'string' ? profileData.team.name : '暂无所属球队',
+                avatarUrl: profileData.avatar_url,
+                teamLogoUrl: profileData.team?.logo_url
+              })}
+              <PlayerCard 
+                nickname={profileData.nickname}
+                teamName={typeof profileData.team?.name === 'string' ? profileData.team.name : '暂无所属球队'}
+                avatarUrl={profileData.avatar_url}
+                teamLogoUrl={profileData.team?.logo_url}
+              />
+            </View>
+            <View style={styles.cardWrapper}>
+              <PixelCard playerData={profileData} />
+            </View>
+          </View>
+
+          <View style={styles.editButtonContainer}>
+            <PixelButton 
+              title="编辑我的卡片"
+              onPress={() => navigation.navigate('EditProfile', { profileData })}
             />
           </View>
-          <View style={styles.cardWrapper}>
-            <PixelCard playerData={profileData} />
-          </View>
-        </View>
 
-        <View style={styles.editButtonContainer}>
-          <PixelButton 
-            title="编辑我的卡片"
-            onPress={() => navigation.navigate('EditProfile', { profileData })}
-          />
-        </View>
-
-        <View style={styles.tabsContainer}>
-          <View style={styles.tabsHeader}>
-            <TouchableOpacity 
-              style={styles.tabButton}
-              onPress={() => setActiveTab('我的小报')}
-            >
-              <Text style={[
-                styles.tabItem,
-                activeTab === '我的小报' && styles.activeTab
-              ]}>
-                {`我的小报(${newsCount})`}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.tabButton}
-              onPress={() => setActiveTab('我的球队')}
-            >
-              <Text style={[
-                styles.tabItem,
-                activeTab === '我的球队' && styles.activeTab
-              ]}>
-                {`我的球队(${teamsCount})`}
-              </Text>
-            </TouchableOpacity>
+          <View style={styles.tabsContainer}>
+            <View style={styles.tabsHeader}>
+              <TouchableOpacity 
+                style={styles.tabButton}
+                onPress={() => setActiveTab('我的小报')}
+              >
+                <AppText style={[
+                  styles.tabItem,
+                  activeTab === '我的小报' && styles.activeTab
+                ]}>
+                  {`我的小报(${newsCount})`}
+                </AppText>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.tabButton}
+                onPress={() => setActiveTab('我的球队')}
+              >
+                <AppText style={[
+                  styles.tabItem,
+                  activeTab === '我的球队' && styles.activeTab
+                ]}>
+                  {`我的球队(${teamsCount})`}
+                </AppText>
+              </TouchableOpacity>
+            </View>
+            <TabContent 
+              activeTab={activeTab}
+              navigation={navigation}
+              profileData={profileData}
+              onCountsUpdate={handleCountsUpdate}
+            />
           </View>
-          <TabContent 
-            activeTab={activeTab}
-            navigation={navigation}
-            profileData={profileData}
-            onCountsUpdate={handleCountsUpdate}
-          />
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
     );
+  };
+
+  const handleShowMenu = () => {
+    setActionSheetVisible(true);
   };
 
   return (
@@ -283,8 +302,10 @@ const ProfileScreen = ({ navigation }) => {
         <Header 
           title="★我的空间★"
           showAddButton={true}
-          buttonType="≣"
-          onAddPress={handleMenuAction}
+          buttonType="≡"
+          onAddPress={handleShowMenu}
+          hideMenuButton={isGuest}
+          buttonRef={menuButtonRef}
         />
         {isLoading ? (
           <View style={styles.loadingContainer}>
@@ -293,6 +314,26 @@ const ProfileScreen = ({ navigation }) => {
         ) : (
           renderContent()
         )}
+
+        <ActionListSheet
+          visible={actionSheetVisible}
+          onClose={() => setActionSheetVisible(false)}
+          title="选择操作"
+          actions={[
+            { label: '编辑我的卡片↩', onPress: () => navigation.navigate('EditProfile') },
+            { label: '退出登录↩', onPress: async () => {
+                try {
+                  await authService.signOut();
+                  setIsGuest(true);
+                  navigation.replace('Login');
+                } catch (error) {
+                  console.error('退出登录失败:', error);
+                  Alert.alert('错误', '退出登录失败，请重试');
+                }
+              }
+            },
+          ]}
+        />
       </SafeAreaView>
     </Background>
   );
@@ -406,6 +447,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.pixel,
     marginBottom: hp(2),
     textAlign: 'center',
+  },
+  title: {
+    fontSize: typography.size.base,
+    fontFamily: fonts.pixel,
+    color: colors.textPrimary,
+    marginBottom: hp(2),
   },
 });
 

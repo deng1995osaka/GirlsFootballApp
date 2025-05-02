@@ -4,8 +4,12 @@ require File.join(File.dirname(`node --print "require.resolve('react-native/pack
 require 'json'
 podfile_properties = JSON.parse(File.read(File.join(__dir__, 'Podfile.properties.json'))) rescue {}
 
-ENV['RCT_NEW_ARCH_ENABLED'] = podfile_properties['newArchEnabled'] == 'true' ? '1' : '0'
+# 强制禁用新架构和 Codegen
+ENV['RCT_NEW_ARCH_ENABLED'] = '0'
 ENV['EX_DEV_CLIENT_NETWORK_INSPECTOR'] = podfile_properties['EX_DEV_CLIENT_NETWORK_INSPECTOR']
+ENV['CODEGEN_ENABLED'] = 'NO'
+ENV['NO_FLIPPER'] = '1'
+ENV['USE_HERMES'] = '1'
 
 platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
 install! 'cocoapods',
@@ -13,8 +17,18 @@ install! 'cocoapods',
 
 prepare_react_native_project!
 
-target 'main' do
+ENV['SWIFT_VERSION'] = '5.0'
+
+target 'TempApp' do
+  config = use_native_modules!
+
+  config[:build_settings] ||= {}
+  config[:build_settings]['SWIFT_VERSION'] = '5.0'
+  config[:build_settings]['ENABLE_BITCODE'] = 'NO'
+  config[:build_settings]['OTHER_CFLAGS'] = '$(inherited) -DRN_FABRIC_ENABLED=0'
+
   use_expo_modules!
+
 
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
     config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];
@@ -42,6 +56,10 @@ target 'main' do
     # An absolute path to your application root.
     :app_path => "#{Pod::Config.instance.installation_root}/..",
     :privacy_file_aggregation_enabled => podfile_properties['apple.privacyManifestAggregationEnabled'] != 'false',
+    # 禁用 Fabric 和其他新架构特性
+    :fabric_enabled => false,
+    # 彻底禁用 Codegen
+    :new_arch_enabled => false
   )
 
   post_install do |installer|
@@ -49,8 +67,31 @@ target 'main' do
       installer,
       config[:reactNativePath],
       :mac_catalyst_enabled => false,
-      :ccache_enabled => podfile_properties['apple.ccacheEnabled'] == 'true',
+      :ccache_enabled => podfile_properties['apple.ccacheEnabled'] == 'false',
     )
+
+    # 🔥 设置 Swift 版本到所有 Targets（包括 App、Pods、Generated Targets）
+    installer.aggregate_targets.each do |aggregate_target|
+      aggregate_target.user_project.native_targets.each do |native_target|
+        native_target.build_configurations.each do |config|
+          config.build_settings['SWIFT_VERSION'] = '5.0'
+          # 禁用 Bitcode
+          config.build_settings['ENABLE_BITCODE'] = 'NO'
+          # 禁用 Codegen
+          config.build_settings['OTHER_CFLAGS'] = '$(inherited) -DRN_FABRIC_ENABLED=0'
+        end
+      end
+    end
+
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['SWIFT_VERSION'] = '5.0'
+        # 禁用 Bitcode
+        config.build_settings['ENABLE_BITCODE'] = 'NO'
+        # 禁用 Codegen
+        config.build_settings['OTHER_CFLAGS'] = '$(inherited) -DRN_FABRIC_ENABLED=0'
+      end
+    end
 
     # This is necessary for Xcode 14, because it signs resource bundles by default
     # when building for devices.

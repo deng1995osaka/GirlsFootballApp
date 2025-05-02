@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
-import { colors, typography, fonts } from './main';
-import { wp, hp } from '../utils/responsive';
+import { colors, typography, fonts } from '@styles/main';
+import { normalize, wp, hp } from '@utils/responsive';
 
 export const commonScreenStyles = StyleSheet.create({
   container: {
@@ -16,11 +16,12 @@ export const commonScreenStyles = StyleSheet.create({
     borderBottomColor: colors.line,
     backgroundColor: colors.bgWhite,
     position: 'relative',
+    zIndex: 1,
   },
   backButton: {
     position: 'absolute',
     left: wp(4),
-    padding: wp(2),
+    
   },
   backButtonText: {
     fontSize: typography.size.xl,

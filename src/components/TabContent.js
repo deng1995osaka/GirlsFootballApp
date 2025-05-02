@@ -1,16 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet } from 'react-native';
-import PixelButton from './PixelButton';
-import TeamCard from './TeamCard';
-import NewsCard from './NewsCard';
-import { colors, fonts, typography } from '../styles/main';
-import { wp, hp } from '../utils/responsive';
-import { supabase } from '../lib/supabase';
+import { View, FlatList, StyleSheet } from 'react-native';
+import AppText from '@components/AppText';
+import PixelButton from '@components/PixelButton';
+import TeamCard from '@components/TeamCard';
+import NewsCard from '@components/NewsCard';
+import { colors, fonts, typography } from '@styles/main';
+import { normalize, wp, hp } from '@utils/responsive';
+import { supabase } from '@lib/supabase';
+import { useProfileCheck } from '@hooks/useProfileCheck';
 
 const TabContent = ({ activeTab, navigation, profileData, onCountsUpdate }) => {
   const [news, setNews] = useState([]);
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(false);
+  const { checkProfile } = useProfileCheck(navigation);
 
   useEffect(() => {
     console.log('TabContent useEffect 触发', { 
@@ -93,11 +96,17 @@ const TabContent = ({ activeTab, navigation, profileData, onCountsUpdate }) => {
     if (news.length === 0) {
       return (
         <View style={styles.emptyCard}>
-          <Text style={styles.placeholderText}>还没有发过小报...</Text>
+          <AppText style={styles.placeholderText}>(･д･)还没有发过小报...</AppText>
           <PixelButton 
-            title="☞发小报"
+            title="发小报↩"
             variant="underline"
-            onPress={() => navigation.navigate('NewsCreate')}
+            status="default"
+            onPress={async () => {
+              const canProceed = await checkProfile();
+              if (canProceed) {
+                navigation.navigate('NewsCreate');
+              }
+            }}
           />
         </View>
       );
@@ -108,11 +117,11 @@ const TabContent = ({ activeTab, navigation, profileData, onCountsUpdate }) => {
         {news.map(item => (
           item ? (
             <NewsCard 
-              key={item?.id?.toString() || Math.random().toString()}
+              key={item?.news_id?.toString() || Math.random().toString()}
               item={item} 
               showMenuButton={true}
               navigation={navigation}
-              onPress={() => navigation.navigate('NewsDetail', { newsId: item.id })}
+              onPress={() => navigation.navigate('NewsDetail', { newsId: item.news_id })}
               onDelete={() => {
                 fetchNews(); // 删除后重新获取数据
               }}
@@ -126,11 +135,17 @@ const TabContent = ({ activeTab, navigation, profileData, onCountsUpdate }) => {
   if (teams.length === 0) {
     return (
       <View style={styles.emptyCard}>
-        <Text style={styles.placeholderText}>还没有加入球队...</Text>
+        <AppText style={styles.placeholderText}>(･д･)还没有创建过球队...</AppText>
         <PixelButton 
-          title="☞创建球队"
+          title="创建球队↩"
           variant="underline"
-          onPress={() => navigation.navigate('CreateTeam')}
+          status="default"
+          onPress={async () => {
+            const canProceed = await checkProfile();
+            if (canProceed) {
+              navigation.navigate('CreateTeam');
+            }
+          }}
         />
       </View>
     );

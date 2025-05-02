@@ -1,15 +1,17 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
-
-import { wp, hp } from '../utils/responsive';
-import { colors, fonts, typography, layout } from '../styles/main';
+import { TouchableOpacity, StyleSheet, View } from 'react-native';
+import AppText from '@components/AppText';
+import { normalize, wp, hp } from '@utils/responsive';
+import { colors, fonts, typography, layout } from '@styles/main';
 
 const PixelButton = ({ 
   title, 
   onPress, 
   variant = 'filled', // 'filled' | 'underline'
   style,
-  textStyle 
+  textStyle,
+  underlineColor, // 新增属性，用于指定下划线颜色
+  status = 'default' // 新增属性，用于指定状态：'success' | 'error' | 'default'
 }) => {
   const buttonStyles = [
     styles.button,
@@ -17,8 +19,23 @@ const PixelButton = ({
     style
   ];
 
+  const getUnderlineColor = () => {
+    if (underlineColor) return underlineColor;
+    switch (status) {
+      case 'success':
+        return '#4CAF50';
+      case 'error':
+        return '#CD5C5C';
+      default:
+        return colors.primary;
+    }
+  };
+
   const textContainerStyles = [
-    variant === 'underline' && styles.underlineContainer
+    variant === 'underline' && {
+      ...styles.underlineContainer,
+      borderBottomColor: getUnderlineColor()
+    }
   ].filter(Boolean);
 
   const textStyles = [
@@ -30,7 +47,7 @@ const PixelButton = ({
   return (
     <TouchableOpacity style={buttonStyles} onPress={onPress}>
       <View style={textContainerStyles}>
-        <Text style={textStyles}>{title}</Text>
+        <AppText style={textStyles}>{title}</AppText>
       </View>
     </TouchableOpacity>
   );
@@ -45,7 +62,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     paddingVertical: hp(1.5),
     paddingHorizontal: wp(4),
-    borderRadius: layout.borderRadius.small,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: colors.line,
   },
@@ -63,9 +80,7 @@ const styles = StyleSheet.create({
   },
   underlineContainer: {
     borderBottomWidth: 1,
-    borderBottomColor: colors.primary,
     paddingBottom: 2,
   },
 });
-
 export default PixelButton;

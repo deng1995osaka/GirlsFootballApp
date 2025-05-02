@@ -1,7 +1,7 @@
-import { supabase } from '../lib/supabase';
+import { supabase } from '@lib/supabase';
 
 // 本地备份数据
-const LOCAL_REGIONS = [
+export const LOCAL_REGIONS = [
   {
     name: '华东地区',
     cities: ['杭州', '南京', '上海', '苏州']

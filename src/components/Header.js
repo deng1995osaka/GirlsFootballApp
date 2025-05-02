@@ -1,9 +1,8 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, Dimensions } from 'react-native';
-import { normalize, wp, hp } from '../utils/responsive';
-import { colors, fonts } from '../styles/main';
-import DropdownMenu from './DropdownMenu';
-import ConfirmModal from './ConfirmModal';
+import React from 'react';
+import { View, TouchableOpacity, StyleSheet, Platform, Dimensions } from 'react-native';
+import AppText from '@components/AppText';
+import { normalize, wp, hp } from '@utils/responsive';
+import { colors, fonts, typography } from '@styles/main';
 
 // 检测是否为刘海屏 iPhone
 const { height, width } = Dimensions.get('window');
@@ -25,99 +24,30 @@ const Header = ({
   title, 
   onAddPress, 
   showAddButton = true,
-  showBackButton = false,
-  onBackPress,
   additionalStyles, 
-  buttonType = "+" 
+  buttonType = "+",
+  hideMenuButton = false,
+  buttonRef
 }) => {
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [menuAnchor, setMenuAnchor] = useState(null);
-  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
-  const buttonRef = useRef(null);
-
-  const menuItems = [
-    { id: 'logout', label: '退出登录' },
-    { id: 'delete', label: '删除账号', danger: true }
-  ];
-
-  const handleMenuSelect = (id) => {
-    setShowDropdown(false);
-    if (id === 'delete') {
-      setConfirmModalVisible(true);
-    } else {
-      onAddPress?.(id);
-    }
-  };
-
-  const handleConfirm = () => {
-    setConfirmModalVisible(false);
-    onAddPress?.('delete');
-  };
-
-  const handleShowMenu = () => {
-    buttonRef.current?.measure((x, y, width, height, pageX, pageY) => {
-      setMenuAnchor({
-        x: pageX,
-        y: pageY,
-        width,
-        height,
-      });
-      setShowDropdown(true);
-    });
-  };
+  const shouldShowButton = showAddButton && (!hideMenuButton || buttonType !== "≡");
 
   return (
-    <>
-      <View style={[styles.header, additionalStyles?.container]}>
-        <View style={styles.headerContent}>
-          {showBackButton && (
-            <TouchableOpacity 
-              style={styles.backButton}
-              onPress={onBackPress}
-            >
-              <Text style={styles.backButtonText}>←</Text>
-            </TouchableOpacity>
-          )}
-          <Text style={[styles.title, additionalStyles?.title]}>{title}</Text>
-          {showAddButton && (
-            <>
-              <TouchableOpacity 
-                ref={buttonRef}
-                style={[styles.addButton, additionalStyles?.button]} 
-                onPress={() => {
-                  if (buttonType === "≣") {
-                    handleShowMenu();
-                  } else {
-                    onAddPress?.();
-                  }
-                }}
-              >
-                <Text style={[styles.addButtonText, additionalStyles?.buttonText]}>
-                  {buttonType === "≣" ? "≣" : "+"}
-                </Text>
-              </TouchableOpacity>
-              
-              <DropdownMenu 
-                visible={showDropdown && buttonType === "≣"}
-                items={menuItems}
-                onSelect={handleMenuSelect}
-                anchor={menuAnchor}
-                edgeDistance={wp(4)}
-              />
-            </>
-          )}
-        </View>
+    <View style={[styles.header, additionalStyles?.container]}>
+      <View style={styles.headerContent}>
+        <AppText style={[styles.title, additionalStyles?.title]}>{title}</AppText>
+        {shouldShowButton && (
+          <TouchableOpacity 
+            ref={buttonRef}
+            style={[styles.addButton, additionalStyles?.button]} 
+            onPress={onAddPress}
+          >
+            <AppText style={[styles.addButtonText, additionalStyles?.buttonText]}>
+              {buttonType === "≡" ? "≡" : "+"}
+            </AppText>
+          </TouchableOpacity>
+        )}
       </View>
-
-      <ConfirmModal
-        isVisible={confirmModalVisible}
-        onClose={() => setConfirmModalVisible(false)}
-        onConfirm={handleConfirm}
-        message="确定要删除账号吗？"
-        confirmText="删除"
-        isDanger={true}
-      />
-    </>
+    </View>
   );
 };
 
@@ -138,7 +68,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: wp(4),
   },
   title: {
-    fontSize: normalize(36),
+    fontSize: typography.size.xxxl,
     color: colors.textPrimary,
     fontFamily: fonts.pixel,
     textAlign: 'center',
@@ -152,18 +82,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   addButtonText: {
-    fontSize: normalize(32),
-    color: colors.textPrimary,
-    fontFamily: fonts.pixel,
-  },
-  backButton: {
-    position: 'absolute',
-    left: wp(1),
-    height: '100%',
-    justifyContent: 'center',
-  },
-  backButtonText: {
-    fontSize: normalize(32),
+    fontSize: typography.size.xxxl,
     color: colors.textPrimary,
     fontFamily: fonts.pixel,
   },

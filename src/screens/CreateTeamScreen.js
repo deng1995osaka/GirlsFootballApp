@@ -4,22 +4,33 @@ import {
   ScrollView, 
   View, 
   StyleSheet,
-  Text,
   TouchableOpacity,
-  Alert
+  Alert,
+  Image,
+  TextInput,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
+  TouchableWithoutFeedback
 } from 'react-native';
-import { colors, typography, fonts } from '../styles/main';
-import { wp, hp } from '../utils/responsive';
-import FormInput from '../components/FormInput';
-import CascadePicker from '../components/CascadePicker';
-import { FORM_CONFIG } from '../config/form';
-import ImageUploadBox from '../components/ImageUploadBox';
-import { commonScreenStyles } from '../styles/screenStyles';
-import DatePicker from '../components/DatePicker';
-import { supabase } from '../lib/supabase';
+import { SafeAreaView as SafeAreaViewRN } from 'react-native-safe-area-context';
+import { colors, typography, fonts } from '@styles/main';
+import { normalize, wp, hp } from '@utils/responsive';
+import FormInput from '@components/FormInput';
+import CascadePicker from '@components/CascadePicker';
+import { FORM_CONFIG } from '@config/form';
+import ImageUploadBox from '@components/ImageUploadBox';
+import { commonScreenStyles } from '@styles/screenStyles';
+import DatePicker from '@components/DatePicker';
+import { supabase } from '@lib/supabase';
 import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
-import { getRegions } from '../config/regions';
+import { LOCAL_REGIONS } from '@config/regions';
+import AppText from '@components/AppText';
+import { useProfileCheck } from '@hooks/useProfileCheck';
+import { teamService } from '@services/teamService';
+import Toast from 'react-native-toast-message';
 
 const YEARS = Array.from({ length: 25 }, (_, i) => (2024 - i).toString());
 const MONTHS = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
@@ -37,6 +48,7 @@ const DATE_REGIONS = [
 
 export default function CreateTeamScreen({ navigation, route }) {
   const { teamData, isEditing } = route.params || {};
+  const { checkProfile } = useProfileCheck(navigation, false);
 
   const [focusedInput, setFocusedInput] = useState(null);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
@@ -77,12 +89,13 @@ export default function CreateTeamScreen({ navigation, route }) {
 
   const [currentPickerMode, setCurrentPickerMode] = useState('year');
   const [isLoading, setIsLoading] = useState(false);
-  const [regions, setRegions] = useState([]);
+  const [regions] = useState(LOCAL_REGIONS);
 
   const screenTitle = isEditing ? '编辑球队' : '新建球队';
   const submitButtonText = isEditing ? '保存修改' : '创建球队';
 
-  const validateField = (field, value) => {
+  const validateField = (field, rawValue) => {
+    const value = typeof rawValue === 'string' ? rawValue : '';
     switch (field) {
       case 'teamName':
         return value.length >= 2;
@@ -116,71 +129,57 @@ export default function CreateTeamScreen({ navigation, route }) {
     }));
   };
 
-  const uploadImage = async (uri, userId, type) => {
-    try {
-      const response = await fetch(uri);
-      if (!response.ok) {
-        throw new Error(`获取文件失败: ${response.status}`);
-      }
-      
-      const blob = await response.blob();
-
-      const timestamp = Date.now();
-      const path = `${userId}/${timestamp}_${type}.jpg`;
-
-      const { data, error } = await supabase.storage
-        .from('teams')
-        .upload(path, blob, {
-          contentType: 'image/jpeg',
-          cacheControl: '3600',
-          upsert: true
-        });
-
-      if (error) {
-        throw error;
-      }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('teams')
-        .getPublicUrl(path);
-
-      return publicUrl;
-
-    } catch (error) {
-      throw new Error(`${type}上传失败: ${error.message}`);
-    }
+  const validateForm = () => {
+    const newErrors = {
+      teamName: !formData.teamName.trim(),
+      location: !formData.location.trim(),
+      establishedYear: !formData.establishedYear,
+      establishedMonth: !formData.establishedMonth,
+      socialPlatform: !formData.socialPlatform.trim(),
+      socialId: !formData.socialId.trim(),
+      court: !formData.court.trim(),
+      teamColor: !formData.teamColor.trim(),
+      rules: !formData.rules.trim(),
+      trainingSessions: !formData.trainingSessions.trim(),
+      gamesPlayed: !formData.gamesPlayed.trim(),
+      teamLogo: !formData.teamLogo,
+      teamUniform: !formData.teamUniform,
+    };
+    setValidFields(newErrors);
+    return !Object.values(newErrors).some(error => error);
   };
 
   const handleSubmit = async () => {
+    if (isLoading) return;
+
     try {
       setIsLoading(true);
-      
-      // 直接从 route.params 获取最新的 uniformData
-      const latestUniform = route.params?.uniformData || formData.teamUniform;
-      console.log('最终提交的队服数据:', latestUniform);
-      
-      if (!formData.teamName || !formData.location || !formData.establishedYear) {
-        Alert.alert('错误', '请填写必要信息：球队名称、所在地、成立时间');
+
+      const canProceed = await checkProfile();
+      if (!canProceed) {
+        setIsLoading(false);
         return;
       }
 
-      const { data: { session } } = await supabase.auth.getSession();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !session) {
-        Alert.alert('错误', '请先登录');
+      if (!user) {
+        throw new Error('请先登录');
+      }
+
+      if (!validateForm()) {
+        setIsLoading(false);
         return;
       }
 
-      // 检查 latestUniform 是否为空
-      if (!latestUniform) {
-        console.error('队服数据为空');
-        Alert.alert('错误', '请先设计队服');
-        return;
+      // ✅ 上传队徽（如果是图片对象）
+      let logoUrl = formData.teamLogo;
+      if (logoUrl && typeof logoUrl !== 'string') {
+        logoUrl = await teamService.uploadTeamImage(logoUrl);
       }
 
-      const teamDataToSubmit = {
+      // ✅ 准备提交数据
+      const teamData = {
         name: formData.teamName,
-        location: formData.location,
         region: formData.region,
         city: formData.city,
         established: `${formData.establishedYear}/${formData.establishedMonth}`,
@@ -190,45 +189,31 @@ export default function CreateTeamScreen({ navigation, route }) {
         rules: formData.rules || null,
         training_count: formData.trainingSessions ? parseInt(formData.trainingSessions) : null,
         match_count: formData.gamesPlayed ? parseInt(formData.gamesPlayed) : null,
-        logo_url: formData.teamLogo,
+        logo_url: logoUrl,
         team_color: formData.teamColor || null,
-        uniform_pixels: JSON.stringify(latestUniform),  // 直接 stringify，不需要检查
-        created_by: user.id
+        uniform_pixels: JSON.stringify(formData.teamUniform),
+        created_by: user.id,
+        updated_at: new Date().toISOString(),
       };
 
-      console.log('准备发送到数据库的数据:', teamDataToSubmit);
-
-      let result;
+      // ✅ 调用封装的 service 方法
       if (isEditing) {
-        const { data, error } = await supabase
-          .from('teams')
-          .update(teamDataToSubmit)
-          .eq('team_id', teamData.team_id)
-          .select();
-          
-        if (error) throw error;
-        result = data;
+        await teamService.updateTeam(route.params.teamData.team_id, teamData);
+        Toast.show({ type: 'success', text1: '成功', text2: '球队信息已更新！' });
       } else {
-        const { data, error } = await supabase
-          .from('teams')
-          .insert([teamDataToSubmit])
-          .select();
-          
-        if (error) throw error;
-        result = data;
+        const { data: { session }, error } = await supabase.auth.getSession();
+        console.log("🟢 当前 Session:", session);
+        console.log("🟡 当前 Access Token:", session?.access_token);
+        
+        await teamService.createTeam(teamData);
+        Toast.show({ type: 'success', text1: '成功', text2: '球队创建成功！' });
       }
 
-      Alert.alert('成功', isEditing ? '球队信息已更新！' : '球队创建成功！');
-      
-      if (route.params?.onTeamCreated) {
-        route.params.onTeamCreated();
-      }
-      
       navigation.goBack();
-      
+
     } catch (error) {
-      console.error('提交错误:', error); // 调试用
-      Alert.alert('错误', (isEditing ? '更新' : '创建') + '失败: ' + error.message);
+      console.error('提交球队失败:', error);
+      Toast.show({ type: 'error', text1: '错误', text2: error.message || '提交失败，请重试' });
     } finally {
       setIsLoading(false);
     }
@@ -244,12 +229,10 @@ export default function CreateTeamScreen({ navigation, route }) {
     }
   };
 
-  const handleImageSelected = async (field, uri) => {
+  const handleImageSelected = async (field, imageObj) => {
     try {
-      if (!uri) {
-        return;
-      }
-      handleInputChange(field, uri);
+      if (!imageObj) return;
+      handleInputChange(field, imageObj); // 存完整对象
     } catch (error) {
       Alert.alert('错误', `图片处理失败: ${error.message}`);
     }
@@ -260,18 +243,9 @@ export default function CreateTeamScreen({ navigation, route }) {
     handleInputChange('teamUniform', uniformData);
   };
 
-  useEffect(() => {
-    const loadRegions = async () => {
-      try {
-        const regionsData = await getRegions();
-        setRegions(regionsData);
-      } catch (error) {
-        Alert.alert('错误', '加载地区数据失败');
-      }
-    };
-    
-    loadRegions();
-  }, []);
+  const handleOpenRegionPicker = () => {
+    setShowLocationPicker(true);
+  };
 
   useEffect(() => {
     if (route.params?.uniformData) {
@@ -281,160 +255,181 @@ export default function CreateTeamScreen({ navigation, route }) {
   }, [route.params?.uniformData]);
 
   return (
-    <SafeAreaView style={commonScreenStyles.container}>
+    <SafeAreaViewRN style={commonScreenStyles.container}>
       <View style={commonScreenStyles.headerContainer}>
         <TouchableOpacity 
           style={commonScreenStyles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={commonScreenStyles.backButtonText}>←</Text>
+          <AppText style={commonScreenStyles.backButtonText}>←</AppText>
         </TouchableOpacity>
-        <Text style={commonScreenStyles.headerTitle}>{screenTitle}</Text>
+        <AppText style={commonScreenStyles.headerTitle}>{screenTitle}</AppText>
       </View>
 
-      <ScrollView style={commonScreenStyles.mainContent}>
-        <View style={commonScreenStyles.formContainer}>
-          <FormInput
-            label="Team Name"
-            value={formData.teamName}
-            onChangeText={(text) => handleInputChange('teamName', text)}
-            placeholder={FORM_CONFIG.placeholders.teamName}
-            isFocused={focusedInput === 'teamName'}
-            onFocus={() => setFocusedInput('teamName')}
-            onBlur={() => setFocusedInput(null)}
-            isValid={validFields.teamName}
-          />
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <ScrollView 
+            style={commonScreenStyles.mainContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={[commonScreenStyles.formContainer, { paddingBottom: hp(20) }]}>
+              <FormInput
+                label="Team Name"
+                value={formData.teamName}
+                onChangeText={(text) => handleInputChange('teamName', text)}
+                placeholder={FORM_CONFIG.placeholders.teamName}
+                isFocused={focusedInput === 'teamName'}
+                onFocus={() => setFocusedInput('teamName')}
+                onBlur={() => setFocusedInput(null)}
+                isValid={validFields.teamName}
+              />
 
-          <FormInput
-            label="Location"
-            value={formData.location}
-            placeholder="选择所在城市"
-            onPress={() => setShowLocationPicker(true)}
-            editable={false}
-            isValid={validFields.location}
-          />
+              <FormInput
+                label="Location"
+                value={formData.location}
+                placeholder="选择所在城市"
+                onPress={handleOpenRegionPicker}
+                editable={false}
+                isValid={validFields.location}
+              />
 
-          <FormInput
-            label="Started"
-            value={formData.establishedYear ? 
-              `${formData.establishedYear}${formData.establishedMonth ? `/${formData.establishedMonth}` : ''}`
-              : undefined}
-            placeholder="选择成立时间"
-            onPress={() => setShowDatePicker(true)}
-            editable={false}
-            isValid={validFields.establishedYear && validFields.establishedMonth}
-          />
+              <FormInput
+                label="Started From"
+                value={formData.establishedYear ? 
+                  `${formData.establishedYear}${formData.establishedMonth ? `/${formData.establishedMonth}` : ''}`
+                  : undefined}
+                placeholder="选择成立时间"
+                onPress={() => setShowDatePicker(true)}
+                editable={false}
+                isValid={validFields.establishedYear && validFields.establishedMonth}
+              />
 
-          <FormInput
-            label="Platform"
-            value={formData.socialPlatform}
-            onChangeText={(text) => handleInputChange('socialPlatform', text)}
-            placeholder="在哪里运营账号？小红书/公众号..."
-            isFocused={focusedInput === 'platform'}
-            onFocus={() => setFocusedInput('platform')}
-            onBlur={() => setFocusedInput(null)}
-            label="Platform"
-            isValid={validFields.socialPlatform}
-          />
-          
-          <FormInput
-            value={formData.socialId}
-            onChangeText={(text) => handleInputChange('socialId', text)}
-            placeholder={formData.socialPlatform ? `请输入${formData.socialPlatform}账号` : "输入账号昵称"}
-            isFocused={focusedInput === 'socialId'}
-            onFocus={() => setFocusedInput('socialId')}
-            onBlur={() => setFocusedInput(null)}
-            label="Contact us"
-            isValid={validFields.socialId}
-          />
+              <FormInput
+                label="Platform"
+                value={formData.socialPlatform}
+                onChangeText={(text) => handleInputChange('socialPlatform', text)}
+                placeholder="在哪里运营账号？小红书/公众号..."
+                isFocused={focusedInput === 'platform'}
+                onFocus={() => setFocusedInput('platform')}
+                onBlur={() => setFocusedInput(null)}
+                isValid={validFields.socialPlatform}
+              />
+              
+              <FormInput
+                value={formData.socialId}
+                onChangeText={(text) => handleInputChange('socialId', text)}
+                placeholder={formData.socialPlatform ? `请输入${formData.socialPlatform}账号` : "输入账号昵称"}
+                isFocused={focusedInput === 'socialId'}
+                onFocus={() => setFocusedInput('socialId')}
+                onBlur={() => setFocusedInput(null)}
+                label="Contact us"
+                isValid={validFields.socialId}
+              />
 
-          <FormInput
-            label="Court"
-            value={formData.court}
-            onChangeText={(text) => handleInputChange('court', text)}
-            placeholder={FORM_CONFIG.placeholders.court}
-            isFocused={focusedInput === 'court'}
-            onFocus={() => setFocusedInput('court')}
-            onBlur={() => setFocusedInput(null)}
-            isValid={validFields.court}
-          />
+              <FormInput
+                label="Court"
+                value={formData.court}
+                onChangeText={(text) => handleInputChange('court', text)}
+                placeholder={FORM_CONFIG.placeholders.court}
+                isFocused={focusedInput === 'court'}
+                onFocus={() => setFocusedInput('court')}
+                onBlur={() => setFocusedInput(null)}
+                isValid={validFields.court}
+              />
 
-          <FormInput
-            label="Team Color"
-            value={formData.teamColor}
-            onChangeText={(text) => {
-              const color = text.startsWith('#') ? text : `#${text}`;
-              handleInputChange('teamColor', color);
-            }}
-            placeholder="输入球队代表色(例#000000)"
-            isFocused={focusedInput === 'teamColor'}
-            onFocus={() => setFocusedInput('teamColor')}
-            onBlur={() => setFocusedInput(null)}
-            isValid={validFields.teamColor}
-          />
+              <FormInput
+                label="Team Color"
+                value={formData.teamColor}
+                onChangeText={(text) => {
+                  const color = text.startsWith('#') ? text : `#${text}`;
+                  const hexOnly = color.replace(/[^0-9A-Fa-f#]/g, '').slice(0, 7); // 限制为 # + 6位
+                  handleInputChange('teamColor', hexOnly);
+                }}
+                placeholder="输入球队代表色(例#000000)"
+                isFocused={focusedInput === 'teamColor'}
+                onFocus={() => setFocusedInput('teamColor')}
+                onBlur={() => setFocusedInput(null)}
+                isValid={validFields.teamColor}
+              />
 
-          <FormInput
-            label="Rules"
-            value={formData.rules}
-            onChangeText={(text) => handleInputChange('rules', text)}
-            placeholder={FORM_CONFIG.placeholders.rules}
-            isFocused={focusedInput === 'rules'}
-            onFocus={() => setFocusedInput('rules')}
-            onBlur={() => setFocusedInput(null)}
-            isValid={validFields.rules}
-          />
+              <FormInput
+                label="Rules/Introductions"
+                value={formData.rules}
+                onChangeText={(text) => handleInputChange('rules', text)}
+                placeholder={FORM_CONFIG.placeholders.rules}
+                isFocused={focusedInput === 'rules'}
+                onFocus={() => setFocusedInput('rules')}
+                onBlur={() => setFocusedInput(null)}
+                isValid={validFields.rules}
+              />
 
-          <FormInput
-            label="Training Sessions"
-            value={formData.trainingSessions}
-            onChangeText={(text) => handleInputChange('trainingSessions', text.replace(/[^0-9]/g, ''))}
-            placeholder="2024年度球队训练次数？"
-            keyboardType="numeric"
-            isFocused={focusedInput === 'trainingSessions'}
-            onFocus={() => setFocusedInput('trainingSessions')}
-            onBlur={() => setFocusedInput(null)}
-            isValid={validFields.trainingSessions}
-          />
+              <FormInput
+                label="Training Sessions"
+                value={formData.trainingSessions}
+                onChangeText={(text) => handleInputChange('trainingSessions', text.replace(/[^0-9]/g, ''))}
+                placeholder="2024年度球队训练次数？"
+                keyboardType="numeric"
+                isFocused={focusedInput === 'trainingSessions'}
+                onFocus={() => setFocusedInput('trainingSessions')}
+                onBlur={() => setFocusedInput(null)}
+                isValid={validFields.trainingSessions}
+              />
 
-          <FormInput
-            label="Games Played"
-            value={formData.gamesPlayed}
-            onChangeText={(text) => handleInputChange('gamesPlayed', text.replace(/[^0-9]/g, ''))}
-            placeholder="2024年度球队约赛次数？"
-            keyboardType="numeric"
-            isFocused={focusedInput === 'gamesPlayed'}
-            onFocus={() => setFocusedInput('gamesPlayed')}
-            onBlur={() => setFocusedInput(null)}
-            isValid={validFields.gamesPlayed}
-          />
+              <FormInput
+                label="Games Played"
+                value={formData.gamesPlayed}
+                onChangeText={(text) => handleInputChange('gamesPlayed', text.replace(/[^0-9]/g, ''))}
+                placeholder="2024年度球队约赛次数？"
+                keyboardType="numeric"
+                isFocused={focusedInput === 'gamesPlayed'}
+                onFocus={() => setFocusedInput('gamesPlayed')}
+                onBlur={() => setFocusedInput(null)}
+                isValid={validFields.gamesPlayed}
+              />
 
-          <ImageUploadBox 
-            text="队服"
-            label=""
-            hasImage={!!formData.teamUniform}
-            value={formData.teamUniform}
-            onImageSelected={() => {
-              navigation.navigate('UniformDesign', {
-                returnScreen: 'CreateTeam',
-                currentUniform: formData.teamUniform,
-                onUniformSave: handleUniformSave
-              });
-            }}
-            isValid={validFields.teamUniform}
-            customUpload={true}
-            isUniform={true}
-          />
+              <ImageUploadBox 
+                text="队服"
+                label=""
+                hasImage={!!formData.teamUniform}
+                value={formData.teamUniform}
+                onImageSelected={() => {
+                  if (!formData.teamColor) {
+                    Toast.show({
+                      type: 'error',
+                      text1: '提示',
+                      text2: '请先输入球队代表色'
+                    });
+                    return;
+                  }
+                  navigation.navigate('UniformDesign', {
+                    returnScreen: 'CreateTeam',
+                    currentUniform: formData.teamUniform,
+                    onUniformSave: handleUniformSave,
+                    teamColor: formData.teamColor
+                  });
+                }}
+                isValid={validFields.teamUniform}
+                customUpload={true}
+                isUniform={true}
+              />
 
-          <ImageUploadBox 
-            text="队徽"
-            label=""
-            hasImage={!!formData.teamLogo}
-            onImageSelected={(uri) => handleImageSelected('teamLogo', uri)}
-            value={formData.teamLogo}
-            isValid={validFields.teamLogo}
-          />
-        </View>
-      </ScrollView>
+              <ImageUploadBox 
+                text="队徽"
+                label=""
+                hasImage={!!formData.teamLogo}
+                onImageSelected={(imageObj) => handleImageSelected('teamLogo', imageObj)}
+                value={typeof formData.teamLogo === 'string' ? formData.teamLogo : formData.teamLogo?.uri}
+                isValid={validFields.teamLogo}
+              />
+            </View>
+          </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
 
       <View style={commonScreenStyles.submitContainer}>
         <TouchableOpacity
@@ -442,24 +437,26 @@ export default function CreateTeamScreen({ navigation, route }) {
           onPress={handleSubmit}
           disabled={isLoading}
         >
-          <Text style={commonScreenStyles.submitButtonText}>{submitButtonText}</Text>
+          <AppText style={commonScreenStyles.submitButtonText}>{submitButtonText}</AppText>
         </TouchableOpacity>
       </View>
 
       <CascadePicker
         visible={showLocationPicker}
         onClose={() => setShowLocationPicker(false)}
-        onSelect={(city) => {
-          const selectedRegion = regions.find(r => r.cities.includes(city));
-          if (selectedRegion) {
-            handleInputChange('region', selectedRegion.name);
-            handleInputChange('city', city);
-            handleInputChange('location', `${selectedRegion.name}-${city}`);
+        onSelect={(cityName) => {
+          if (cityName && typeof cityName === 'string') {
+            const selectedRegion = regions.find(r => r.cities.includes(cityName));
+            if (selectedRegion) {
+              handleInputChange('region', selectedRegion.name);
+              handleInputChange('city', cityName);
+              handleInputChange('location', `${selectedRegion.name}-${cityName}`);
+            }
           }
           setShowLocationPicker(false);
         }}
         regions={regions}
-        title="选择城市"
+        title="选择所在城市"
         showTeams={false}
       />
 
@@ -469,7 +466,7 @@ export default function CreateTeamScreen({ navigation, route }) {
         onSelect={handleDateSelect}
         title="选择成立时间"
       />
-    </SafeAreaView>
+    </SafeAreaViewRN>
   );
 }
 

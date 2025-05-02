@@ -7,12 +7,24 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  Platform,
+  Image,
+  ActivityIndicator,
+  Share
 } from 'react-native';
-import { colors, typography, fonts } from '../styles/main';
-import { wp, hp } from '../utils/responsive';
-import { commonScreenStyles } from '../styles/screenStyles';
+import { SafeAreaView as SafeAreaViewSafe } from 'react-native-safe-area-context';
+import { colors, typography, fonts } from '@styles/main';
+import { normalize, wp, hp } from '@utils/responsive';
+import { commonScreenStyles } from '@styles/screenStyles';
 import ViewShot from 'react-native-view-shot';
 import Svg, { Rect } from 'react-native-svg';
+import AppText from '@components/AppText';
+import UniformRenderer from '@components/UniformRenderer';
+import { supabase } from '@lib/supabase';
+import * as FileSystem from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 
 const GRID_SIZE = 14;
 const SHIRT_PATTERN = [
@@ -53,8 +65,21 @@ const Pixel = React.memo(({ x, y, size, color, onPress, disabled }) => (
 
 export default function UniformDesignScreen({ navigation, route }) {
   const [selectedColor, setSelectedColor] = useState(COLOR_PALETTE[0]);
+  const [colorPalette, setColorPalette] = useState(() => {
+    // 获取传入的球队主题色
+    const teamColor = route.params?.teamColor;
+    // 如果传入的颜色合法且不在现有调色板中，则添加到最前面
+    if (teamColor && /^#[0-9A-Fa-f]{6}$/.test(teamColor) && !COLOR_PALETTE.includes(teamColor)) {
+      return [teamColor, ...COLOR_PALETTE].slice(0, 20); // 限制总数不超过20个
+    }
+    return COLOR_PALETTE;
+  });
   const [pixelColors, setPixelColors] = useState(
-    Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill('#F5F4E2'))
+    Array(GRID_SIZE).fill().map((_, i) => 
+      Array(GRID_SIZE).fill().map((_, j) => 
+        SHIRT_PATTERN[i][j] === 1 ? '#565752' : '#F5F4E2'
+      )
+    )
   );
   const viewShotRef = useRef();
 
@@ -72,13 +97,13 @@ export default function UniformDesignScreen({ navigation, route }) {
   };
 
   const handlePixelPress = useCallback((row, col) => {
-    if (!isInsideShirt(row, col)) return;
-    
+    if (!isInsideShirt(row, col) && SHIRT_PATTERN[row][col] !== 1) return;
+
     setPixelColors(prev => {
       const newColors = [...prev];
       newColors[row] = [
         ...newColors[row].slice(0, col),
-        newColors[row][col] === selectedColor ? '#F5F4E2' : selectedColor,
+        newColors[row][col] === selectedColor ? (SHIRT_PATTERN[row][col] === 1 ? '#000000' : '#F5F4E2') : selectedColor,
         ...newColors[row].slice(col + 1)
       ];
       return newColors;
@@ -135,32 +160,38 @@ export default function UniformDesignScreen({ navigation, route }) {
         preserveAspectRatio="xMidYMid meet"
       >
         {SHIRT_PATTERN.map((row, rowIndex) => (
-          row.map((cell, colIndex) => (
-            <Pixel
-              key={`${rowIndex}-${colIndex}`}
-              x={colIndex * pixelSize}
-              y={rowIndex * pixelSize}
-              size={pixelSize}
-              color={cell === 1 ? '#565752' : pixelColors[rowIndex][colIndex]}
-              onPress={() => handlePixelPress(rowIndex, colIndex)}
-              disabled={cell === 1 || !isInsideShirt(rowIndex, colIndex)}
-            />
-          ))
+          row.map((cell, colIndex) => {
+            if (cell === 1 || isInsideShirt(rowIndex, colIndex)) {
+              const color = pixelColors[rowIndex][colIndex];
+              return (
+                <Pixel
+                  key={`${rowIndex}-${colIndex}`}
+                  x={colIndex * pixelSize}
+                  y={rowIndex * pixelSize}
+                  size={pixelSize}
+                  color={color}
+                  onPress={() => handlePixelPress(rowIndex, colIndex)}
+                  disabled={!isInsideShirt(rowIndex, colIndex) && SHIRT_PATTERN[rowIndex][colIndex] !== 1}
+                />
+              );
+            }
+            return null;
+          })
         ))}
       </Svg>
     );
   }, [pixelColors, handlePixelPress]);
 
   return (
-    <SafeAreaView style={commonScreenStyles.container}>
+    <SafeAreaViewSafe style={commonScreenStyles.container}>
       <View style={commonScreenStyles.headerContainer}>
         <TouchableOpacity 
           style={commonScreenStyles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={commonScreenStyles.backButtonText}>←</Text>
+          <AppText style={commonScreenStyles.backButtonText}>←</AppText>
         </TouchableOpacity>
-        <Text style={commonScreenStyles.headerTitle}>生成队服</Text>
+        <AppText style={commonScreenStyles.headerTitle}>生成队服</AppText>
       </View>
 
       <ScrollView style={styles.content}>
@@ -169,7 +200,7 @@ export default function UniformDesignScreen({ navigation, route }) {
         </ViewShot>
 
         <View style={styles.colorPicker}>
-          {COLOR_PALETTE.map((color, index) => (
+          {colorPalette.map((color, index) => (
             <TouchableOpacity
               key={index}
               style={[
@@ -188,10 +219,10 @@ export default function UniformDesignScreen({ navigation, route }) {
           style={commonScreenStyles.submitButton}
           onPress={handleSave}
         >
-          <Text style={commonScreenStyles.submitButtonText}>保存队服</Text>
+          <AppText style={commonScreenStyles.submitButtonText}>保存队服</AppText>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </SafeAreaViewSafe>
   );
 }
 

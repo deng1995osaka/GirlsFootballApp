@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { supabase } from '@lib/supabase';
 
 export const userStore = {
   // 获取用户资料
@@ -30,13 +30,26 @@ export const userStore = {
       .from('profiles')
       .update({
         nickname: profileData.nickname,
-        jersey_number: profileData.number,
-        positions: profileData.selectedPositions,
-        avatar_url: profileData.avatar
+        jersey_number: profileData.jersey_number,
+        positions: profileData.positions,
+        avatar_url: profileData.avatar_url,
+        team_id: profileData.team_id
       })
       .eq('id', user.id);
 
     if (error) throw error;
     return data;
+  },
+
+  setProfile: (profileData) => {
+    set({
+      profile: {
+        nickname: profileData.nickname,
+        jersey_number: profileData.jersey_number,
+        positions: profileData.positions,
+        team: profileData.team,
+        avatar_url: profileData.avatar_url,
+      }
+    });
   }
 };

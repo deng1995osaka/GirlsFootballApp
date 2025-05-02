@@ -1,6 +1,7 @@
 {
+  "name": "GirlsFootballApp",
   "expo": {
-    "name": "main",
+    "name": "GirlsFootballApp",
     "slug": "GirlsFootballApp",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -12,7 +13,7 @@
 
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.GirlsFootballApp",
+      "bundleIdentifier": "com.girlsfootball.app",
       "associatedDomains": [
         "applinks:sfgcrobnxslmdhnzwhhm.supabase.co"
       ],
@@ -23,7 +24,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.anonymous.GirlsFootballApp",
+      "package": "com.girlsfootball.app",
       "intentFilters": [
         {
           "action": "VIEW",

@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { supabase } from '@lib/supabase';
 
 export const teamsStore = {
   async getTeamsList() {
@@ -13,7 +13,6 @@ export const teamsStore = {
         return {
           team_id: team.team_id,
           name: team.name,
-          location: team.location,
           region: team.region,
           city: team.city,
           established: new Date(team.established).getFullYear() + '年成立',

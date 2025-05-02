@@ -1,27 +1,91 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, SafeAreaView, FlatList, View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
-import Header from '../components/Header';
-import TeamCard from '../components/TeamCard';
-import Background from '../components/Background';
-import { colors, fonts, typography } from '../styles/main';
-import { normalize, wp, hp } from '../utils/responsive';
-import { teamsService } from '../services/teamService';
-import DropdownMenu from '../components/DropdownMenu';
-import { getRegions } from '../config/regions';
+import { StyleSheet, FlatList, View, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Header from '@components/Header';
+import TeamCard from '@components/TeamCard';
+import Background from '@components/Background';
+import { colors, fonts, typography } from '@styles/main';
+import { normalize, wp, hp } from '@utils/responsive';
+import { teamService } from '@services/teamService';
+import DropdownMenu from '@components/DropdownMenu';
+import { getRegions } from '@config/regions';
+import AppText from '@components/AppText';
+import { supabase } from '@lib/supabase';
+import { useProfileCheck } from '@hooks/useProfileCheck';
 
 export default function TeamsScreen({ navigation }) {
   const [teams, setTeams] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [currentFilter, setCurrentFilter] = useState('全部');
   const [isDropdownVisible, setIsDropdownVisible] = useState(false);
   const [filterItems, setFilterItems] = useState([{ id: '全部', label: '全部' }]);
   const [menuAnchor, setMenuAnchor] = useState(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const filterButtonRef = useRef(null);
+  const [currentUserId, setCurrentUserId] = useState(null);
+  const { checkProfile } = useProfileCheck(navigation);
+
+  useEffect(() => {
+    checkLoginStatus();
+    
+    // 监听认证状态变化
+    const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setIsLoggedIn(!!session);
+      if (session) {
+        const { data: { user } } = await supabase.auth.getUser();
+        setCurrentUserId(user?.id);
+      } else {
+        setCurrentUserId(null);
+      }
+    });
+
+    // 订阅 teams 表的变更
+    const teamsSubscription = supabase
+      .channel('public:teams')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'teams'
+      }, payload => {
+        console.log('✅ 监听到变更: ', payload);
+        loadTeams(); // 自动刷新
+      })
+      .subscribe();
+
+    return () => {
+      authSubscription.unsubscribe();
+      teamsSubscription.unsubscribe();
+    };
+  }, []);
+
+  const checkLoginStatus = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      setIsLoggedIn(!!session);
+      if (session) {
+        const { data: { user } } = await supabase.auth.getUser();
+        setCurrentUserId(user?.id);
+      }
+    } catch (error) {
+      console.error('检查登录状态失败:', error);
+    }
+  };
+
+  const handleAddPress = async () => {
+    const canProceed = await checkProfile();
+    if (canProceed) {
+      navigation.navigate('CreateTeam');
+    }
+  };
 
   const handleFilterSelect = (id) => {
     setCurrentFilter(id);
     setIsDropdownVisible(false);
+  };
+
+  const refreshTeams = async () => {
+    await loadTeams();
   };
 
   useEffect(() => {
@@ -61,9 +125,9 @@ export default function TeamsScreen({ navigation }) {
       setLoading(true);
       let data;
       if (currentFilter === '全部') {
-        data = await teamsService.getAllTeams();
+        data = await teamService.getAllTeams();
       } else {
-        data = await teamsService.getTeamsByLocation(currentFilter);
+        data = await teamService.getTeamsByLocation(currentFilter);
       }
       setTeams(data);
     } catch (err) {
@@ -85,72 +149,85 @@ export default function TeamsScreen({ navigation }) {
     });
   };
 
-  const renderTeamCard = ({ item }) => (
-    <TeamCard 
-      team={{
-        ...item,
-        location: `${item.region} · ${item.city}`,
-      }} 
-    />
-  );
+  const renderTeamCard = ({ item }) => {
+    // 如果是默认球队ID，则不显示
+    if (item.team_id === '00000000-0000-0000-0000-000000000001') {
+      return null;
+    }
+    
+    return (
+      <TeamCard 
+        team={item}
+        showMenuButton={false}
+        navigation={navigation}
+        onDelete={() => {
+          fetchTeams(); // 删除后重新获取数据
+        }}
+      />
+    );
+  };
 
   return (
     <Background>
       <SafeAreaView style={styles.container}>
         <Header 
           title="★女孩踢球★"
-          onAddPress={() => navigation.navigate('CreateTeam', {
-            onTeamCreated: () => {
-              loadTeams();
-            }
-          })}
+          onAddPress={handleAddPress}
+          showAddButton={true}
         />
+        
+        <View style={styles.filterContainer}>
+          <TouchableOpacity 
+            ref={filterButtonRef}
+            style={styles.filterButton}
+            onPress={handleShowFilter}
+          >
+            <AppText style={styles.filterText}>{currentFilter}</AppText>
+            <AppText style={styles.arrowText}>▼</AppText>
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.mainContent}>
-          <View style={styles.filterContainer}>
-            <TouchableOpacity 
-              ref={filterButtonRef}
-              style={styles.filterButton}
-              onPress={handleShowFilter}
-            >
-              <Text style={styles.filterText}>
-                {currentFilter}
-                <Text style={styles.arrowText}> ▼</Text>
-              </Text>
-            </TouchableOpacity>
-            
-            <DropdownMenu 
-              visible={isDropdownVisible}
-              items={filterItems}
-              onSelect={handleFilterSelect}
-              position="left"
-              anchor={menuAnchor}
-            />
-          </View>
-          
-          {loading ? (
+          {error ? (
+            <View style={styles.errorContainer}>
+              <AppText style={styles.errorText}>{error}</AppText>
+              <TouchableOpacity onPress={refreshTeams}>
+                <AppText style={styles.retryText}>重试</AppText>
+              </TouchableOpacity>
+            </View>
+          ) : loading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
             </View>
-          ) : error ? (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{error}</Text>
+          ) : !teams.length ? (
+            <View style={styles.emptyContainer}>
+              <AppText style={styles.emptyText}>暂无球队</AppText>
+              <TouchableOpacity onPress={refreshTeams}>
+                <AppText style={styles.retryText}>刷新</AppText>
+              </TouchableOpacity>
             </View>
           ) : (
             <FlatList
               data={teams}
               renderItem={renderTeamCard}
               keyExtractor={item => item.team_id}
-              contentContainerStyle={styles.listContainer}
+              contentContainerStyle={styles.teamsList}
               showsVerticalScrollIndicator={false}
-              ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>暂无球队数据</Text>
-                </View>
-              }
-              ListFooterComponent={<View style={styles.listFooter} />}
+              refreshing={loading}
+              onRefresh={refreshTeams}
             />
           )}
         </View>
+
+        <DropdownMenu
+          visible={isDropdownVisible}
+          anchor={menuAnchor}
+          items={filterItems}
+          onSelect={handleFilterSelect}
+          onClose={() => setIsDropdownVisible(false)}
+          edgeDistance={wp(4)}
+          position="left"
+        />
       </SafeAreaView>
     </Background>
   );
@@ -175,6 +252,7 @@ const styles = StyleSheet.create({
     paddingVertical: hp(1),
     paddingHorizontal: wp(2),
     position: 'relative',
+    flexDirection: 'row',
   },
   filterText: {
     fontFamily: fonts.pixel,
@@ -222,7 +300,18 @@ const styles = StyleSheet.create({
     padding: wp(4),
   },
   emptyText: {
-    color: colors.textSecondary,
+    color: colors.textPrimary,
+    fontSize: typography.size.base,
+    fontFamily: fonts.pixel,
+    textAlign: 'center',
+  },
+  teamsList: {
+    paddingHorizontal: wp(4),
+    paddingTop: hp(0),
+    flexGrow: 1,
+  },
+  retryText: {
+    color: colors.primary,
     fontSize: typography.size.base,
     fontFamily: fonts.pixel,
     textAlign: 'center',

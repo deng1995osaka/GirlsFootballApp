@@ -1,31 +1,79 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image } from 'react-native';
+import { View, StyleSheet, Image } from 'react-native';
+import { normalize, wp, hp } from '@utils/responsive';
+import { colors, fonts, typography, layout } from '@styles/main';
+import AppText from '@components/AppText';
+import Svg, { Path } from 'react-native-svg';
 
-import { normalize, wp, hp } from '../utils/responsive';
-import { colors, fonts, typography, layout } from '../styles/main';
+const Star = () => {
+  // 计算五角星的路径
+  const size = wp(7);
+  const points = 5;
+  const radius = size / 2;
+  const innerRadius = radius * 0.382; // 黄金分割比例
+  let path = '';
+  
+  for (let i = 0; i < points * 2; i++) {
+    const r = i % 2 === 0 ? radius : innerRadius;
+    const angle = (i * Math.PI) / points;
+    const x = radius + r * Math.sin(angle);
+    const y = radius - r * Math.cos(angle);
+    path += `${i === 0 ? 'M' : 'L'} ${x} ${y} `;
+  }
+  path += 'Z';
+
+  return (
+    <View style={styles.starContainer}>
+      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <Path
+          d={path}
+          fill="#BEBEBE"
+        />
+      </Svg>
+    </View>
+  );
+};
 
 const PlayerCard = ({ nickname, teamName, avatarUrl, teamLogoUrl }) => {
+  console.log('🔍 PlayerCard - 接收到的 props:', {
+    nickname,
+    teamName,
+    avatarUrl,
+    teamLogoUrl
+  });
+
+  // 确保 teamName 是字符串类型
+  const displayTeamName = typeof teamName === 'string' ? teamName : '暂无所属球队';
+
+  // 检查昵称第一个字符是否为中文
+  const isFirstCharChinese = nickname && /[\u4e00-\u9fa5]/.test(nickname[0]);
+
+  // 根据第一个字符类型设置位置
+  const dynamicStyle = {
+    top: isFirstCharChinese ? hp(6) : hp(3),
+  };
+
   return (
     <View style={styles.playerCard}>
       <View style={styles.cardMain}>
         <View style={styles.cardLeft}>
           <View style={styles.avatarContainer}>
-            {avatarUrl && (
-              <Image 
-                source={{ uri: avatarUrl }}
-                style={styles.avatarImage}
-                resizeMode="cover"
-              />
-            )}
+            {console.log('🧾 最终头像传入的 uri:', avatarUrl)}
+            <Image
+              source={{ uri: avatarUrl }}
+              style={styles.avatarImage}
+              onLoad={() => console.log('✅ 头像加载成功')}
+              onError={(error) => console.error('❌ 头像加载失败:', error)}
+            />
           </View>
-          <Text style={styles.starIcon}>★</Text>
+          <Star />
         </View>
         <View style={styles.cardRight}>
-          <Text style={styles.playerName}>{nickname || '未设置昵称'}</Text>
+          <AppText style={[styles.playerName, dynamicStyle]} numberOfLines={1}>{nickname || '未设置昵称'}</AppText>
         </View>
       </View>
       <View style={styles.cardBottom}>
-        <Text style={styles.teamName}>{teamName || '主队'}</Text>
+        <AppText style={styles.teamName}>{displayTeamName}</AppText>
         <View style={styles.teamBadge}>
           {teamLogoUrl ? (
             <Image 
@@ -75,17 +123,20 @@ const styles = StyleSheet.create({
   playerName: {
     fontSize: typography.size.xl,
     color: colors.textPrimary,
-    writingDirection: 'vertical-rl',
+    transform: [{ rotate: '90deg' }],
     textAlign: 'center',
     letterSpacing: wp(0),
     fontFamily: fonts.pixel,
+    width: hp(20),
+    position: 'absolute',
+    right: -hp(7.5),
   },
   avatarContainer: {
     position: 'absolute',
-    top: 1,
-    left: 1,
-    right: 1,
-    bottom: 1,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     overflow: 'hidden',
     borderTopLeftRadius: layout.borderRadius.medium - 1,
     borderBottomRightRadius: wp(25) - 1,
@@ -94,12 +145,10 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  starIcon: {
+  starContainer: {
     position: 'absolute',
     top: hp(1),
     left: wp(2.5),
-    fontSize: typography.size.xxl,
-    color: '#CCCCCC',
     zIndex: 1,
   },
   cardBottom: {

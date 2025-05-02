@@ -1,23 +1,76 @@
 import React, { useState, useEffect } from 'react';
 import { 
     View,
-    SafeAreaView, 
     StyleSheet, 
     FlatList, 
-    Text,
-    ActivityIndicator 
+    ActivityIndicator, 
+    TouchableOpacity,
+    RefreshControl,
+    Alert
 } from 'react-native';
-import { newsStore } from '../store';
-import NewsCard from '../components/NewsCard';
-import Background from '../components/Background';
-import { colors, fonts, typography } from '../styles/main';
-import Header from '../components/Header';
-import { normalize, wp, hp } from '../utils/responsive';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { newsStore } from '@store';
+import { supabase } from '@lib/supabase';
+import NewsCard from '@components/NewsCard';
+import Background from '@components/Background';
+import { colors, fonts, typography } from '@styles/main';
+import Header from '@components/Header';
+import { normalize, wp, hp } from '@utils/responsive';
+import AppText from '@components/AppText';
+import { useProfileCheck } from '@hooks/useProfileCheck';
 
 const NewsScreen = ({ navigation }) => {
     const [newsData, setNewsData] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const { checkProfile } = useProfileCheck(navigation);
+
+    console.log('NewsScreen 组件加载了');
+
+    useEffect(() => {
+        checkLoginStatus();
+        
+        // 监听认证状态变化
+        const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setIsLoggedIn(!!session);
+        });
+
+        // 订阅新闻变更
+        const newsSubscription = supabase
+            .channel('public:news')
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'news'
+            }, payload => {
+                console.log('✅ 监听到新闻变更: ', payload);
+                loadNewsData(); // 自动刷新
+            })
+            .subscribe();
+
+        return () => {
+            authSubscription.unsubscribe();
+            newsSubscription.unsubscribe();
+        };
+    }, []);
+
+    const checkLoginStatus = async () => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            setIsLoggedIn(!!session);
+        } catch (error) {
+            console.error('检查登录状态失败:', error);
+        }
+    };
+
+    const handleAddPress = async () => {
+        
+        const canProceed = await checkProfile();
+        if (canProceed) {
+            navigation.navigate('NewsCreate');
+        }
+    };
 
     useEffect(() => {
         loadNewsData();
@@ -51,34 +104,27 @@ const NewsScreen = ({ navigation }) => {
         />
     );
 
-    if (error) {
-        return (
-            <Background>
-                <SafeAreaView style={styles.container}>
-                    <Header 
-                        title="★球星小报★"
-                        onAddPress={() => navigation.navigate('NewsCreate')}
-                    />
-                    <View style={styles.errorContainer}>
-                        <Text style={styles.errorText}>{error}</Text>
-                    </View>
-                </SafeAreaView>
-            </Background>
-        );
-    }
-
     return (
         <Background>
             <SafeAreaView style={styles.container}>
                 <Header 
                     title="★球星小报★"
-                    onAddPress={() => navigation.navigate('NewsCreate')}
+                    onAddPress={handleAddPress}
+                    showAddButton={true}
                 />
                 
                 <View style={styles.mainContent}>
-                    {isLoading ? (
+                    {error ? (
+                        <View style={styles.errorContainer}>
+                            <AppText style={styles.errorText}>{error}</AppText>
+                        </View>
+                    ) : isLoading ? (
                         <View style={styles.loadingContainer}>
                             <ActivityIndicator size="large" color={colors.primary} />
+                        </View>
+                    ) : !newsData.length ? (
+                        <View style={styles.emptyContainer}>
+                            <AppText style={styles.emptyText}>暂无新闻</AppText>
                         </View>
                     ) : (
                         <FlatList
@@ -89,12 +135,18 @@ const NewsScreen = ({ navigation }) => {
                             showsVerticalScrollIndicator={false}
                             ListEmptyComponent={
                                 <View style={styles.emptyContainer}>
-                                    <Text style={styles.emptyText}>暂无新闻</Text>
+                                    <AppText style={styles.emptyText}>暂无新闻</AppText>
                                 </View>
                             }
                             ListFooterComponent={<View style={styles.listFooter} />}
                             onRefresh={loadNewsData}
                             refreshing={isLoading}
+                            refreshControl={
+                                <RefreshControl
+                                    refreshing={isLoading}
+                                    onRefresh={loadNewsData}
+                                />
+                            }
                         />
                     )}
                 </View>
@@ -126,13 +178,13 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        paddingTop: hp(5),
+        padding: wp(4),
     },
     emptyText: {
+        color: colors.textPrimary,
         fontSize: typography.size.base,
-        color: colors.textTertiary,
         fontFamily: fonts.pixel,
-        marginTop: hp(2),
+        textAlign: 'center',
     },
     listFooter: {
         height: hp(2),

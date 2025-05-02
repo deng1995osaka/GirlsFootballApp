@@ -1,6 +1,8 @@
 import React from 'react';
-import { View } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { colors } from '@styles/main';
 import Svg, { Rect, Pattern, Defs } from 'react-native-svg';
+import { normalize, wp, hp } from '@utils/responsive';
 
 export const SHIRT_PATTERN = [
   [0,0,0,1,1,0,0,0,0,1,1,0,0,0],
@@ -68,33 +70,28 @@ const UniformRenderer = ({ pixels, style }) => {
           fill="url(#checkerboard)"
         />
 
-        {pixels.map((row, i) => 
-          row.map((color, j) => (
-            <Rect
-              key={`pixel-${i}-${j}`}
-              x={(j + MARGIN_LEFT) * pixelSize}
-              y={i * pixelSize}
-              width={pixelSize}
-              height={pixelSize}
-              fill={(!isInsideShirt(i, j) && SHIRT_PATTERN[i][j] !== 1) ? 'url(#checkerboard)' : (color || '#F5F4E2')}
-            />
-          ))
+        {SHIRT_PATTERN.map((row, i) =>
+          row.map((cell, j) => {
+            if (cell === 1 || isInsideShirt(i, j)) {
+              const color = pixels?.[i]?.[j] || '#F5F4E2';
+              return (
+                <Rect
+                  key={`pixel-${i}-${j}`}
+                  x={(j + MARGIN_LEFT) * pixelSize}
+                  y={i * pixelSize}
+                  width={pixelSize}
+                  height={pixelSize}
+                  fill={color}
+                />
+              );
+            }
+            return null;
+          })
         )}
 
-        {SHIRT_PATTERN.map((row, i) => 
-          row.map((cell, j) => (
-            cell === 1 && (
-              <Rect
-                key={`outline-${i}-${j}`}
-                x={(j + MARGIN_LEFT) * pixelSize}
-                y={i * pixelSize}
-                width={pixelSize}
-                height={pixelSize}
-                fill="#565752"
-              />
-            )
-          ))
-        )}
+        
+
+        
       </Svg>
     </View>
   );

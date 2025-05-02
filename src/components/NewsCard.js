@@ -1,41 +1,39 @@
 import React, { useState, useRef } from 'react';
-import { View, TouchableOpacity, Image, Text, StyleSheet, Alert } from 'react-native';
+import { View, TouchableOpacity, Image, StyleSheet, Alert } from 'react-native';
+import AppText from '@components/AppText';
 
-import { wp, hp } from '../utils/responsive';
-import { colors, fonts, typography, layout } from '../styles/main';
-import DropdownMenu from './DropdownMenu';
-import { supabase } from '../lib/supabase';
-import ConfirmModal from './ConfirmModal';
+import { normalize, wp, hp } from '@utils/responsive';
+import { colors, fonts, typography, layout } from '@styles/main';
+import { supabase } from '@lib/supabase';
+import VerificationSuccessSheet from '@components/VerificationSuccessSheet';
+import ActionListSheet from '@components/ActionListSheet';
 
 const NewsCard = ({ item, onPress, showMenuButton = false, navigation, onDelete }) => {
   const [imageError, setImageError] = useState(false);
-  const [menuVisible, setMenuVisible] = useState(false);
-  const [menuAnchor, setMenuAnchor] = useState(null);
-  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [sheetVisible, setSheetVisible] = useState(false);
+  const [actionSheetVisible, setActionSheetVisible] = useState(false);
   const buttonRef = useRef(null);
 
-  const menuOptions = [
-    { id: 'edit', label: '编辑' },
-    { id: 'delete', label: '删除', danger: true }
-  ];
-
   const handleMenuAction = (action) => {
-    console.log("执行操作:", action);
-    setMenuVisible(false);
-    
     if (action === 'edit') {
-      console.log("跳转到 NewsCreate");
       navigation.navigate('NewsCreate', {
         newsData: item,
         isEditing: true
       });
     } else if (action === 'delete') {
-      setDeleteModalVisible(true);
+      setSheetVisible(true);
     }
   };
 
   const handleDelete = async () => {
     try {
+      // 先检查认证状态
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        Alert.alert('错误', '请先登录');
+        return;
+      }
+
       const { error } = await supabase
         .from('news')
         .delete()
@@ -49,60 +47,52 @@ const NewsCard = ({ item, onPress, showMenuButton = false, navigation, onDelete 
       console.error('删除失败:', error);
       Alert.alert('错误', '删除失败，请重试');
     }
-    setDeleteModalVisible(false);
+    setSheetVisible(false);
   };
 
-  const handleShowMenu = () => {
-    buttonRef.current?.measure((x, y, width, height, pageX, pageY) => {
-      setMenuAnchor({
-        x: pageX,
-        y: pageY,
-        width,
-        height,
-      });
-      setMenuVisible(true);
-    });
+  const handleShowMenu = (e) => {
+    // 阻止事件冒泡，防止触发卡片的 onPress
+    e.stopPropagation();
+    setActionSheetVisible(true);
+  };
+
+  // 如果没有提供 onPress 回调，则默认导航到详情页
+  const handleCardPress = () => {
+    if (onPress) {
+      onPress();
+    } else if (navigation && item.news_id) {
+      navigation.navigate('NewsDetail', { newsId: item.news_id });
+    }
   };
 
   return (
     <>
       <TouchableOpacity 
         style={styles.newsCard}
-        onPress={onPress}
+        onPress={handleCardPress}
       >
         <View style={styles.newsContent}>
           <View style={styles.newsHeader}>
-            <Text style={styles.newsTitle} numberOfLines={2}>
+            <AppText style={styles.newsTitle} numberOfLines={2}>
               {item.title}
-            </Text>
+            </AppText>
             {showMenuButton && (
               <View style={styles.menuContainer}>
                 <TouchableOpacity
                   ref={buttonRef}
                   onPress={handleShowMenu}
                 >
-                  <Text style={styles.menuButton}>≣</Text>
+                  <AppText style={styles.menuButton}>≡</AppText>
                 </TouchableOpacity>
-                
-                <DropdownMenu
-                  visible={menuVisible}
-                  onSelect={(value) => {
-                    setMenuVisible(false);
-                    if (value) handleMenuAction(value);
-                  }}
-                  items={menuOptions}
-                  anchor={menuAnchor}
-                  edgeDistance={wp(5)}
-                />
               </View>
             )}
           </View>
-          <Text style={styles.newsText} numberOfLines={2}>
+          <AppText style={styles.newsText} numberOfLines={2}>
             {item.summary || item.content}
-          </Text>
+          </AppText>
           {(!item.image_url || imageError) ? (
             <View style={styles.placeholderImage}>
-              <Text style={styles.placeholderText}>◇ 图片未加载 ◇</Text>
+              <AppText style={styles.placeholderText}>◇ 图片未加载 ◇</AppText>
             </View>
           ) : (
             <Image 
@@ -120,20 +110,37 @@ const NewsCard = ({ item, onPress, showMenuButton = false, navigation, onDelete 
             />
           )}
           <View style={styles.newsMeta}>
-            <Text style={styles.authorName}>
+            <AppText style={styles.authorName}>
               ◈{item.profiles?.nickname || '匿名'}◈
-            </Text>
+            </AppText>
           </View>
         </View>
       </TouchableOpacity>
 
-      <ConfirmModal
-        isVisible={deleteModalVisible}
-        onClose={() => setDeleteModalVisible(false)}
+      <VerificationSuccessSheet
+        visible={sheetVisible}
+        onClose={() => setSheetVisible(false)}
         onConfirm={handleDelete}
-        message="确定要删除这条小报吗？"
+        title="删除小报"
+        message="(･д･)确定要删除吗？此操作不可恢复。"
         confirmText="删除"
-        isDanger={true}
+        confirmTextColor={colors.error}
+      />
+
+      <ActionListSheet
+        visible={actionSheetVisible}
+        onClose={() => setActionSheetVisible(false)}
+        title="小报操作"
+        actions={[
+          { 
+            label: '编辑小报↩',
+            onPress: () => handleMenuAction('edit')
+          },
+          { 
+            label: '删除小报↩',
+            onPress: () => handleMenuAction('delete')
+          }
+        ]}
       />
     </>
   );
@@ -173,6 +180,8 @@ const styles = StyleSheet.create({
     height: hp(25),
     borderRadius: 0,
     marginVertical: hp(1),
+    borderWidth: 1,
+    borderColor: colors.line,
   },
   placeholderImage: {
     width: '100%',

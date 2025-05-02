@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Image } from 'react-native';
-import { colors } from '../styles/main';
-import { wp, hp } from '../utils/responsive';
+import { colors } from '@styles/main';
+import { normalize, wp, hp } from '@utils/responsive';
 
 const BorderBox = ({ children, style, iconSource }) => {
   const [imageWidth, setImageWidth] = useState(wp(8));

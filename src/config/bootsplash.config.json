@@ -1,0 +1,6 @@
+{
+  "logo": "./assets/images/splash-icon.png",
+  "backgroundColor": "#ffffff",
+  "logoWidth": 100,
+  "assetsPath": "./assets"
+}

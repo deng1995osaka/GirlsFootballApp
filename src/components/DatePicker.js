@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
 import { 
-  Modal, 
   View, 
-  Text, 
   TouchableOpacity, 
   StyleSheet,
-  
+  ScrollView
 } from 'react-native';
-import { colors, typography, fonts } from '../styles/main';
-import { wp, hp } from '../utils/responsive';
-import { Picker } from '@react-native-picker/picker';
+import AppText from '@components/AppText';
+import { colors, typography, fonts } from '@styles/main';
+import { normalize, wp, hp } from '@utils/responsive';
+import BottomSheet from '@components/BottomSheet';
 
 const DatePicker = ({ visible, onClose, onSelect, title }) => {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -29,100 +28,116 @@ const DatePicker = ({ visible, onClose, onSelect, title }) => {
     onClose();
   };
 
-  return (
-    <Modal
-      visible={visible}
-      transparent={true}
-      animationType="slide"
+  const PickerItem = ({ label, selected, onPress }) => (
+    <TouchableOpacity 
+      style={[styles.pickerItem, selected && styles.pickerItemSelected]} 
+      onPress={onPress}
     >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={onClose}>
-              <Text style={styles.headerButton}>取消</Text>
-            </TouchableOpacity>
-            <Text style={styles.title}>{title}</Text>
-            <TouchableOpacity onPress={handleConfirm}>
-              <Text style={styles.headerButton}>确定</Text>
-            </TouchableOpacity>
-          </View>
-          
-          <View style={styles.pickerContainer}>
-            <Picker
-              style={styles.picker}
-              selectedValue={selectedYear}
-              onValueChange={(value) => setSelectedYear(value)}
-            >
-              {years.map(year => (
-                <Picker.Item key={year} label={`${year}年`} value={year} />
-              ))}
-            </Picker>
-            
-            <Picker
-              style={styles.picker}
-              selectedValue={selectedMonth}
-              onValueChange={(value) => setSelectedMonth(value)}
-            >
-              {months.map(month => (
-                <Picker.Item key={month} label={`${month}月`} value={month} />
-              ))}
-            </Picker>
-            
-            <Picker
-              style={styles.picker}
-              selectedValue={selectedDay}
-              onValueChange={(value) => setSelectedDay(value)}
-            >
-              <Picker.Item label="现在不填" value="skip" />
-              {days.slice(1).map(day => (
-                <Picker.Item key={day} label={`${day}日`} value={day} />
-              ))}
-            </Picker>
-          </View>
-        </View>
+      <AppText style={[
+        styles.pickerItemText,
+        selected && styles.pickerItemTextSelected,
+        /[0-9a-zA-Z]/.test(label) ? { fontFamily: fonts.pixel } : null
+      ]}>
+        {label}
+      </AppText>
+    </TouchableOpacity>
+  );
+
+  return (
+    <BottomSheet
+      visible={visible}
+      title={title}
+      onClose={onClose}
+   
+      headerRight={
+        <TouchableOpacity onPress={handleConfirm} style={styles.confirmButton}>
+          <AppText style={styles.confirmButtonText}>确定</AppText>
+        </TouchableOpacity>
+      }
+      contentStyle={styles.pickerContainer}
+    >
+      <View style={styles.pickerColumn}>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {years.map(year => (
+            <PickerItem
+              key={year}
+              label={`${year}年`}
+              selected={selectedYear === year}
+              onPress={() => setSelectedYear(year)}
+            />
+          ))}
+        </ScrollView>
       </View>
-    </Modal>
+      
+      <View style={styles.pickerColumn}>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {months.map(month => (
+            <PickerItem
+              key={month}
+              label={`${month}月`}
+              selected={selectedMonth === month}
+              onPress={() => setSelectedMonth(month)}
+            />
+          ))}
+        </ScrollView>
+      </View>
+      
+      <View style={styles.pickerColumn}>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <PickerItem
+            key="skip"
+            label="现在不填"
+            selected={selectedDay === 'skip'}
+            onPress={() => setSelectedDay('skip')}
+          />
+          {days.slice(1).map(day => (
+            <PickerItem
+              key={day}
+              label={`${day}日`}
+              selected={selectedDay === day}
+              onPress={() => setSelectedDay(day)}
+            />
+          ))}
+        </ScrollView>
+      </View>
+    </BottomSheet>
   );
 };
 
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: colors.bgWhite,
-    borderTopLeftRadius: wp(4),
-    borderTopRightRadius: wp(4),
-    paddingBottom: hp(4),
-  },
-  header: {
+  pickerContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: wp(4),
-    borderBottomWidth: 1,
-    borderBottomColor: colors.line,
+    height: hp(30),
   },
-  headerButton: {
+  pickerColumn: {
+    flex: 1,
+    borderRightWidth: 1,
+    borderRightColor: colors.line,
+  },
+  pickerItem: {
+    height: hp(6),
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: wp(2),
+  },
+  pickerItemSelected: {
+    backgroundColor: colors.bgLight,
+  },
+  pickerItemText: {
+    fontSize: typography.size.base,
+    color: colors.textPrimary,
+  },
+  pickerItemTextSelected: {
+    color: colors.primary,
+  },
+  confirmButton: {
+    marginRight: 0,
+  },
+  confirmButtonText: {
     fontSize: typography.size.base,
     color: colors.primary,
     fontFamily: fonts.pixel,
   },
-  title: {
-    fontSize: typography.size.base,
-    color: colors.textPrimary,
-    fontFamily: fonts.pixel,
-  },
-  pickerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  picker: {
-    flex: 1,
-    height: hp(25),
-  }
 });
 
 export default DatePicker;

@@ -1,15 +1,17 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, View, Image, Linking } from 'react-native';
+import { Text, View, Image, Linking, TouchableOpacity } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { createStackNavigator } from '@react-navigation/stack';
 import { colors, fonts, typography } from './src/styles/main';
 import { TransitionPresets } from '@react-navigation/stack';
-import DevMenu from './src/components/DevMenu';
 import { PortalProvider } from '@gorhom/portal';
 import { normalize, wp, hp } from './src/utils/responsive';
+import { icons } from './src/constants/icons';
+import Toast, { BaseToast } from 'react-native-toast-message';
+import { toastConfig } from './src/config/toastConfig';
 
 import TeamsScreen from './src/screens/TeamsScreen';
 import NewsScreen from './src/screens/NewsScreen';
@@ -21,8 +23,14 @@ import EditProfileScreen from './src/screens/EditProfileScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import UniformDesignScreen from './src/screens/UniformDesignScreen';
 import EmailVerificationScreen from './src/screens/EmailVerificationScreen';
-import WelcomeScreen from './src/screens/WelcomeScreen';
 import PhoneLogin from './src/screens/PhoneLogin';
+
+// 设置Text组件的默认字体
+Text.defaultProps = Text.defaultProps || {};
+Text.defaultProps.style = { 
+  fontFamily: fonts.primary,  // 使用VT323作为默认字体，中文会自动回退到系统字体
+  ...Text.defaultProps?.style 
+};
 
 SplashScreen.preventAutoHideAsync();
 
@@ -40,7 +48,7 @@ function TabNavigator() {
           borderTopColor: colors.line,
         },
         tabBarLabelStyle: {
-          fontFamily: fonts.pixel,
+          fontFamily: fonts.primary,  // 使用VT323像素字体
           fontSize: typography.size.xs,
           zIndex: 2
         },
@@ -55,7 +63,7 @@ function TabNavigator() {
           title: '球队',
           tabBarIcon: ({ focused }) => (
             <Image 
-              source={focused ? require('./assets/icons/teams_active.png') : require('./assets/icons/teams.png')}
+              source={focused ? icons.tabBar.teams.active : icons.tabBar.teams.inactive}
               style={{ width: wp(7.5), height: hp(3) }}
             />
           ),
@@ -69,7 +77,7 @@ function TabNavigator() {
           title: '球星小报',
           tabBarIcon: ({ focused }) => (
             <Image 
-              source={focused ? require('./assets/icons/news_active.png') : require('./assets/icons/news.png')}
+              source={focused ? icons.tabBar.news.active : icons.tabBar.news.inactive}
               style={{ width: 30, height: 24 }}
             />
           ),
@@ -83,7 +91,7 @@ function TabNavigator() {
           title: '我的空间',
           tabBarIcon: ({ focused }) => (
             <Image 
-              source={focused ? require('./assets/icons/profile_active.png') : require('./assets/icons/profile.png')}
+              source={focused ? icons.tabBar.profile.active : icons.tabBar.profile.inactive}
               style={{ width: 30, height: 24 }}
             />
           ),
@@ -121,26 +129,18 @@ function MainNavigator() {
   );
 }
 
-// 创建一个新组件来处理深度链接
 function DeepLinkHandler() {
   const navigation = useNavigation();
 
   useEffect(() => {
     const handleDeepLink = async (event) => {
       const url = event?.url;
-      
-      if (!url) {
-        return;
-      }
+      if (!url) return;
 
       try {
         const handleUrl = (inputUrl) => {
-          const isVerificationUrl = inputUrl.includes('auth/verify');
-          
-          if (isVerificationUrl) {
-            setTimeout(() => {
-              navigation.navigate('Login');
-            }, 0);
+          if (inputUrl.includes('auth/verify')) {
+            setTimeout(() => navigation.navigate('Login'), 0);
           }
         };
 
@@ -149,9 +149,7 @@ function DeepLinkHandler() {
         });
 
         const initialUrl = await Linking.getInitialURL();
-        if (initialUrl) {
-          handleUrl(initialUrl);
-        }
+        if (initialUrl) handleUrl(initialUrl);
 
         await Linking.canOpenURL('girlsfootball://auth/verify');
         await Linking.canOpenURL('exp://auth/verify');
@@ -161,21 +159,16 @@ function DeepLinkHandler() {
         return () => {
           subscription.remove();
         };
-
       } catch (error) {
-        // 保留空的 catch 块以维持错误处理
+        // 留空处理
       }
     };
 
     const subscription = Linking.addEventListener('url', handleDeepLink);
 
-    Linking.getInitialURL().then(url => {
-      if (url) {
-        handleDeepLink({ url });
-      }
-    }).catch(err => {
-      // 保留空的 catch 块以维持错误处理
-    });
+    Linking.getInitialURL().then((url) => {
+      if (url) handleDeepLink({ url });
+    }).catch(() => {});
 
     return () => {
       subscription.remove();
@@ -191,30 +184,45 @@ function RootNavigator() {
       <View style={{ flex: 1 }}>
         <MainNavigator />
         <DeepLinkHandler />
-        {__DEV__ && <DevMenu />}
       </View>
     </PortalProvider>
   );
 }
 
 export default function App() {
-  const [fontsLoaded] = useFonts({
-    'PixelFont': require('./assets/fonts/pixel-font.ttf'),
+  const [fontsLoaded, fontError] = useFonts({
+    'VT323-Regular': require('./assets/fonts/VT323-Regular.ttf'),
   });
 
   const onLayoutRootView = useCallback(async () => {
-    if (fontsLoaded) {
+    if (fontsLoaded || fontError) {
+      // 字体加载完成或出错时，隐藏启动屏幕
       await SplashScreen.hideAsync();
     }
-  }, [fontsLoaded]);
+  }, [fontsLoaded, fontError]);
 
-  if (!fontsLoaded) {
+  useEffect(() => {
+    // 如果字体加载出错，打印错误信息
+    if (fontError) {
+      console.warn('字体加载失败:', fontError);
+    }
+  }, [fontError]);
+
+  // 如果字体未加载完成且没有错误，保持显示启动屏幕
+  if (!fontsLoaded && !fontError) {
     return null;
   }
 
   return (
-    <NavigationContainer onReady={onLayoutRootView}>
-      <RootNavigator />
+    <NavigationContainer>
+      <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+        <RootNavigator />
+      </View>
+      <Toast 
+        config={toastConfig} 
+        topOffset={hp(4)}
+        visibilityTime={2000}
+      />
     </NavigationContainer>
   );
 }

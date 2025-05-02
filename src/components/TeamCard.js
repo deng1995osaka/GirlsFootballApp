@@ -1,19 +1,20 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Alert } from 'react-native';
-import { normalize, wp, hp } from '../utils/responsive';
-import { colors, fonts, typography, layout } from '../styles/main';
-import DropdownMenu from './DropdownMenu';
-import { supabase } from '../lib/supabase';
-import ConfirmModal from './ConfirmModal';
+import { View, StyleSheet, Image, TouchableOpacity, Alert } from 'react-native';
+import AppText from '@components/AppText';
+import { normalize, wp, hp } from '@utils/responsive';
+import { colors, fonts, typography, layout } from '@styles/main';
+import { supabase } from '@lib/supabase';
+import VerificationSuccessSheet from '@components/VerificationSuccessSheet';
+import ActionListSheet from '@components/ActionListSheet';
 import Svg, { Rect, Pattern, Defs } from 'react-native-svg';
 
 
 // InfoGroup 组件定义
 const InfoGroup = ({ label, value }) => (
   <View style={styles.infoGroup}>
-    <Text style={styles.label}>{label}</Text>
+    <AppText style={styles.label}>{label}</AppText>
     <View style={styles.separator} />
-    <Text style={styles.value}>{value || '-'}</Text>
+    <AppText style={styles.value}>{value || '-'}</AppText>
   </View>
 );
 
@@ -120,9 +121,8 @@ const UniformRenderer = ({ pixels }) => {
 };
 
 const TeamCard = ({ team, showMenuButton, navigation, onDelete }) => {
-  const [menuVisible, setMenuVisible] = useState(false);
-  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
-  const [menuAnchor, setMenuAnchor] = useState(null);
+  const [sheetVisible, setSheetVisible] = useState(false);
+  const [actionSheetVisible, setActionSheetVisible] = useState(false);
   const buttonRef = useRef(null);
   
   // 解析 uniform_pixels
@@ -135,26 +135,26 @@ const TeamCard = ({ team, showMenuButton, navigation, onDelete }) => {
     console.error("TeamCard - uniform_pixels 解析失败:", error);
   }
 
-  const menuOptions = [
-    { id: 'edit', label: '编辑' },
-    { id: 'delete', label: '删除', danger: true }
-  ];
-
   const handleMenuAction = (action) => {
-    setMenuVisible(false);
-    
     if (action === 'edit') {
       navigation.navigate('CreateTeam', {
         teamData: team,
         isEditing: true
       });
     } else if (action === 'delete') {
-      setDeleteModalVisible(true);
+      setSheetVisible(true);
     }
   };
 
   const handleDelete = async () => {
     try {
+      // 先检查认证状态
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        Alert.alert('错误', '请先登录');
+        return;
+      }
+
       const { error } = await supabase
         .from('teams')
         .delete()
@@ -168,22 +168,14 @@ const TeamCard = ({ team, showMenuButton, navigation, onDelete }) => {
       console.error('删除失败:', error);
       Alert.alert('错误', '删除失败，请重试');
     }
-    setDeleteModalVisible(false);
+    setSheetVisible(false);
   };
 
   const handleShowMenu = () => {
-    buttonRef.current?.measure((x, y, width, height, pageX, pageY) => {
-      setMenuAnchor({
-        x: pageX,
-        y: pageY,
-        width,
-        height,
-      });
-      setMenuVisible(true);
-    });
+    setActionSheetVisible(true);
   };
 
-  const contactDisplay = team.contact ? `${team.platform} ${team.contact}` : '-';
+  const contactDisplay = team.contact ? `${team.platform}@${team.contact}` : '-';
   const trainingCount = team.training_count || 0;
   const matchCount = team.match_count || 0;
 
@@ -201,19 +193,8 @@ const TeamCard = ({ team, showMenuButton, navigation, onDelete }) => {
                 ref={buttonRef}
                 onPress={handleShowMenu}
               >
-                <Text style={styles.menuButtonText}>≣</Text>
+                <AppText style={styles.menuButtonText}>≡</AppText>
               </TouchableOpacity>
-              
-              <DropdownMenu
-                visible={menuVisible}
-                onSelect={(value) => {
-                  setMenuVisible(false);
-                  if (value) handleMenuAction(value);
-                }}
-                items={menuOptions}
-                anchor={menuAnchor}
-                edgeDistance={wp(5)}
-              />
             </View>
           )}
           <View style={styles.headerSection}>
@@ -238,14 +219,14 @@ const TeamCard = ({ team, showMenuButton, navigation, onDelete }) => {
                 ) : (
                   <View style={styles.logoBox} />
                 )}
-                <Text style={styles.teamName}>{team.name}</Text>
+                <AppText style={styles.teamName}>{team.name}</AppText>
               </View>
             </View>
           </View>
 
           <View style={styles.infoRow}>
             <InfoGroup label="Location" value={team.city} />
-            <InfoGroup label="Started" value={team.established} />
+            <InfoGroup label="Started From" value={team.established} />
           </View>
 
           <InfoGroup 
@@ -254,7 +235,10 @@ const TeamCard = ({ team, showMenuButton, navigation, onDelete }) => {
           />
 
           <InfoGroup label="Court" value={team.court} />
-          <InfoGroup label="Rules" value={team.rules} />
+          <InfoGroup 
+            label="Rules/Introductions" 
+            value={team.rules} 
+          />
 
           <View>
             <View style={styles.statsContainer}>
@@ -263,29 +247,59 @@ const TeamCard = ({ team, showMenuButton, navigation, onDelete }) => {
                   source={require('../../assets/icons/ball.png')}
                   style={styles.statIcon}
                 />
-                <Text style={styles.statText}>{trainingCount}次训练</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <AppText style={styles.statText}>{trainingCount}</AppText>
+                  <AppText 
+                    style={styles.statText}
+                    onLayout={() => {
+                      console.log('次训练 style:', styles.statText);
+                      console.log('次训练 fontFamily:', styles.statText.fontFamily);
+                    }}
+                  >
+                    次训练
+                  </AppText>
+                </View>
               </View>
               <View style={styles.statItem}>
                 <Image 
                   source={require('../../assets/icons/field.png')}
                   style={styles.statIcon}
                 />
-                <Text style={styles.statText}>{matchCount}场约赛</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <AppText style={styles.statText}>{matchCount}</AppText>
+                  <AppText style={styles.statText}>场约赛</AppText>
+                </View>
               </View>
             </View>
-            <Text style={styles.yearNote}>*2024年度</Text>
+            <AppText style={styles.yearNote}>*2024年度</AppText>
           </View>
         </View>
       </View>
 
-      <ConfirmModal
-        isVisible={deleteModalVisible}
-        onClose={() => setDeleteModalVisible(false)}
+      <VerificationSuccessSheet
+        visible={sheetVisible}
+        onClose={() => setSheetVisible(false)}
         onConfirm={handleDelete}
-        title="确认删除"
-        message="确定要删除这支球队吗？"
+        title="删除球队"
+        message="(･д･)确定要删除吗？此操作不可恢复。"
         confirmText="删除"
-        isDanger={true}
+        confirmTextColor={colors.error}
+      />
+
+      <ActionListSheet
+        visible={actionSheetVisible}
+        onClose={() => setActionSheetVisible(false)}
+        title="球队操作"
+        actions={[
+          { 
+            label: '编辑球队↩',
+            onPress: () => handleMenuAction('edit')
+          },
+          { 
+            label: '删除球队↩',
+            onPress: () => handleMenuAction('delete')
+          }
+        ]}
       />
     </>
   );
@@ -396,7 +410,6 @@ const styles = StyleSheet.create({
   statText: {
     fontSize: typography.size.sm,
     color: colors.textPrimary,
-    fontFamily: fonts.pixel,
   },
   yearNote: {
     fontSize: typography.size.xs,

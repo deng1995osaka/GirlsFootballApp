@@ -1,13 +1,14 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import AppText from '@components/AppText';
 
-import { normalize, wp, hp } from '../utils/responsive';
-import { colors, fonts, typography, layout } from '../styles/main';
+import { normalize, wp, hp } from '@utils/responsive';
+import { colors, fonts, typography, layout } from '@styles/main';
 
 const PixelCard = ({ playerData }) => {
   const {
     nickname = '球员昵称',
-    number = '23',
+    jersey_number = '23',
     positions = []
   } = playerData || {};
 
@@ -121,8 +122,8 @@ const PixelCard = ({ playerData }) => {
     return (
       <View style={styles.container}>
         <View style={styles.content}>
-          <Text style={styles.playerNumber}>{number}</Text>
-          <Text style={styles.playerName}>{nickname}</Text>
+          <AppText style={styles.playerNumber}>{jersey_number}</AppText>
+          <AppText style={styles.playerName}>{nickname}</AppText>
           
           <View style={styles.fieldDiagram}>
             {fieldLayout.map((row, rowIndex) => (
@@ -140,7 +141,7 @@ const PixelCard = ({ playerData }) => {
     console.error('PixelCard render error:', error);
     return (
       <View style={[styles.container, styles.errorContainer]}>
-        <Text style={styles.errorText}>显示出现问题</Text>
+        <AppText style={styles.errorText}>显示出现问题</AppText>
       </View>
     );
   }
@@ -160,7 +161,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     alignItems: 'center',
-    marginTop: hp(3),
+    marginTop: hp(0),
   },
   playerNumber: {
     fontSize: normalize(70),

@@ -1,12 +1,18 @@
-import { supabase } from '../lib/supabase';
+import { supabase } from '@lib/supabase';
 import * as Application from 'expo-application';
 import * as SecureStore from 'expo-secure-store';
+import { profileService } from '@services/profileService';
 
 export const authService = {
   // 检查当前登录状态
   async checkAuth() {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      return session;
+    } catch (error) {
+      console.error('检查登录状态失败:', error);
+      return null;
+    }
   },
 
   // 邮箱登录
@@ -34,6 +40,18 @@ export const authService = {
       });
 
       if (error) throw error;
+
+      // 使用 profileService 创建用户档案
+      if (data.user) {
+        try {
+          await profileService.createProfile(data.user.id);
+        } catch (profileError) {
+          console.error('创建用户档案失败:', profileError);
+          // 即使创建档案失败，也返回注册成功的结果
+          // 用户可以稍后在编辑档案时重试
+        }
+      }
+
       return data;
     } catch (error) {
       console.error('注册失败:', error);
@@ -64,40 +82,6 @@ export const authService = {
     } catch (error) {
       console.error('退出登录失败:', error);
       throw new Error('退出登录失败，请重试');
-    }
-  },
-
-  // 删除账号
-  async deleteAccount() {
-    try {
-      const session = await this.checkAuth();
-      if (!session) throw new Error('用户未登录');
-
-      // 1. 删除用户相关数据
-      const { error: deleteError } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', session.user.id);
-      
-      if (deleteError) throw deleteError;
-
-      // 2. 删除用户认证信息
-      const { error: authError } = await supabase.auth.admin.deleteUser(
-        session.user.id
-      );
-      
-      if (authError) throw authError;
-
-      // 3. 清除本地存储
-      await SecureStore.deleteItemAsync('device_id');
-      
-      // 4. 登出
-      await this.signOut();
-
-      return true;
-    } catch (error) {
-      console.error('删除账号失败:', error);
-      throw new Error('删除账号失败，请重试');
     }
   },
 
