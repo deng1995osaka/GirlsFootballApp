@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, FlatList, View, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, FlatList, View, TouchableOpacity, ActivityIndicator, Alert, UIManager, findNodeHandle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Header from '@components/Header';
 import TeamCard from '@components/TeamCard';
@@ -138,14 +138,22 @@ export default function TeamsScreen({ navigation }) {
   };
 
   const handleShowFilter = () => {
-    filterButtonRef.current?.measure((x, y, width, height, pageX, pageY) => {
-      setMenuAnchor({
-        x: pageX,
-        y: pageY,
-        width,
-        height,
+    requestAnimationFrame(() => {
+      const node = findNodeHandle(filterButtonRef.current);
+      if (!node) {
+        console.warn('⚠️ filterButtonRef is not attached yet');
+        return;
+      }
+
+      UIManager.measure(node, (x, y, width, height, pageX, pageY) => {
+        if (typeof pageX !== 'number') {
+          console.warn('⚠️ UIManager.measure failed, got invalid coords');
+          return;
+        }
+
+        setMenuAnchor({ x: pageX, y: pageY, width, height });
+        setIsDropdownVisible(true);
       });
-      setIsDropdownVisible(true);
     });
   };
 
@@ -177,14 +185,15 @@ export default function TeamsScreen({ navigation }) {
         />
         
         <View style={styles.filterContainer}>
-          <TouchableOpacity 
-            ref={filterButtonRef}
-            style={styles.filterButton}
-            onPress={handleShowFilter}
-          >
-            <AppText style={styles.filterText}>{currentFilter}</AppText>
-            <AppText style={styles.arrowText}>▼</AppText>
-          </TouchableOpacity>
+          <View ref={filterButtonRef}>
+            <TouchableOpacity 
+              style={styles.filterButton}
+              onPress={handleShowFilter}
+            >
+              <AppText style={styles.filterText}>{currentFilter}</AppText>
+              <AppText style={styles.arrowText}>▼</AppText>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.mainContent}>

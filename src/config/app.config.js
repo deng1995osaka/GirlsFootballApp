@@ -30,7 +30,7 @@ export default {
   extra: {
     isProduction: process.env.APP_ENV === 'production',
     eas: {
-      projectId: "your-project-id"
+      projectId: "4bfd4271-4332-4362-8a36-ffdc6339aac8"
     }
   }
 }; 

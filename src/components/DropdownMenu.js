@@ -6,15 +6,11 @@ import { normalize, wp, hp } from '@utils/responsive';
 import { colors, fonts, typography } from '@styles/main';
 
 export default function DropdownMenu({ items, onSelect, visible, anchor, edgeDistance, onClose, position = 'right' }) {
-  console.log('🔍 DropdownMenu - 渲染:', { visible, anchor, items, position });
-  
   if (!visible || !anchor) {
-    console.log('🔍 DropdownMenu - 不显示菜单:', { visible, anchor });
     return null;
   }
 
   const handleOverlayPress = () => {
-    console.log('🔍 DropdownMenu - 点击覆盖层');
     if (onClose) {
       onClose();
     }
@@ -57,7 +53,6 @@ export default function DropdownMenu({ items, onSelect, visible, anchor, edgeDis
                 item.danger && styles.dangerItem
               ]}
               onPress={() => {
-                console.log('🔍 DropdownMenu - 选择菜单项:', item.id);
                 onSelect(item.id);
               }}
             >

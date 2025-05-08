@@ -160,12 +160,12 @@ const CreateNewsScreen = () => {
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <ScrollView 
             style={commonScreenStyles.mainContent}
-            contentContainerStyle={{ paddingBottom: hp(0) }}
+            contentContainerStyle={{ paddingBottom: hp(12) }}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
@@ -239,19 +239,19 @@ const CreateNewsScreen = () => {
             </View>
           </ScrollView>
         </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
 
-      <View style={commonScreenStyles.submitContainer}>
-        <TouchableOpacity
-          style={commonScreenStyles.submitButton}
-          onPress={handleSubmit}
-          disabled={submitting}
-        >
-          <AppText style={commonScreenStyles.submitButtonText}>
-            {submitting ? '发布中...' : '发小报'}
-          </AppText>
-        </TouchableOpacity>
-      </View>
+        <View style={commonScreenStyles.submitContainer}>
+          <TouchableOpacity
+            style={commonScreenStyles.submitButton}
+            onPress={handleSubmit}
+            disabled={submitting}
+          >
+            <AppText style={commonScreenStyles.submitButtonText}>
+              {isEditing ? '保存' : '发布'}
+            </AppText>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };

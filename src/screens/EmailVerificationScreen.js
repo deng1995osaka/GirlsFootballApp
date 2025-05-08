@@ -116,6 +116,9 @@ const EmailVerificationScreen = ({ route, navigation }) => {
     }
 
     setEmailError('');
+    // 立即开始倒计时，提升用户体验
+    setCountdown(60);
+    
     try {
       setLoading(true);
       const { error } = await supabase.auth.resend({
@@ -124,20 +127,50 @@ const EmailVerificationScreen = ({ route, navigation }) => {
       });
 
       if (error) {
-        console.error('重发验证邮件失败:', error);
-        Toast.show({
-          type: 'error',
-          text1: '发送失败',
-          text2: '验证邮件发送失败，请稍后重试',
-          visibilityTime: 3000,
-          autoHide: true,
-          position: 'top',
-        });
+        // 重置倒计时，允许用户重试
+        setCountdown(0);
+        
+        // 根据错误类型提供不同的提示
+        if (error.status === 429) {
+          Toast.show({
+            type: 'error',
+            text1: '发送失败',
+            text2: '操作过于频繁，请稍后再试',
+            visibilityTime: 3000,
+            autoHide: true,
+            position: 'top',
+          });
+        } else if (error.message?.includes('network')) {
+          Toast.show({
+            type: 'error',
+            text1: '网络错误',
+            text2: '请检查网络连接后重试',
+            visibilityTime: 3000,
+            autoHide: true,
+            position: 'top',
+          });
+        } else if (error.message?.includes('email')) {
+          Toast.show({
+            type: 'error',
+            text1: '邮箱错误',
+            text2: '邮箱地址无效或格式不正确',
+            visibilityTime: 3000,
+            autoHide: true,
+            position: 'top',
+          });
+        } else {
+          console.error('重发验证邮件失败:', error);
+          Toast.show({
+            type: 'error',
+            text1: '发送失败',
+            text2: '验证邮件发送失败，请稍后重试',
+            visibilityTime: 3000,
+            autoHide: true,
+            position: 'top',
+          });
+        }
         return;
       }
-
-      // 设置60秒倒计时
-      setCountdown(60);
 
       Toast.show({
         type: 'success',
@@ -148,6 +181,8 @@ const EmailVerificationScreen = ({ route, navigation }) => {
         position: 'top',
       });
     } catch (error) {
+      // 发生异常时也重置倒计时
+      setCountdown(0);
       Toast.show({
         type: 'error',
         text1: '错误',

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   SafeAreaView,
   View,
@@ -16,7 +16,6 @@ import { SafeAreaView as SafeAreaViewSafe } from 'react-native-safe-area-context
 import { colors, typography, fonts } from '@styles/main';
 import { normalize, wp, hp } from '@utils/responsive';
 import { commonScreenStyles } from '@styles/screenStyles';
-import ViewShot from 'react-native-view-shot';
 import Svg, { Rect } from 'react-native-svg';
 import AppText from '@components/AppText';
 import UniformRenderer from '@components/UniformRenderer';
@@ -24,7 +23,6 @@ import { supabase } from '@lib/supabase';
 import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
-import { captureRef } from 'react-native-view-shot';
 
 const GRID_SIZE = 14;
 const SHIRT_PATTERN = [
@@ -81,7 +79,6 @@ export default function UniformDesignScreen({ navigation, route }) {
       )
     )
   );
-  const viewShotRef = useRef();
 
   const isInsideShirt = (row, col) => {
     if (SHIRT_PATTERN[row][col] === 1) return false;
@@ -195,9 +192,9 @@ export default function UniformDesignScreen({ navigation, route }) {
       </View>
 
       <ScrollView style={styles.content}>
-        <ViewShot ref={viewShotRef} style={styles.editorContainer}>
+        <View style={styles.editorContainer}>
           {renderGrid()}
-        </ViewShot>
+        </View>
 
         <View style={styles.colorPicker}>
           {colorPalette.map((color, index) => (

@@ -21,6 +21,8 @@
   },
   "frameworks": "AssetsLibrary",
   "dependencies": {
-    "React-Core": []
+    "React-Core": [
+
+    ]
   }
 }

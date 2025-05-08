@@ -1,21 +1,23 @@
 {
   "name": "ExpoHead",
-  "version": "4.0.19",
-  "summary": "Expo Router is a file-based router for React Native and web applications.",
-  "description": "Expo Router is a file-based router for React Native and web applications.",
+  "version": "0.0.20",
+  "summary": "static page definitions for universal SEO",
+  "description": "static page definitions for universal SEO",
   "license": "MIT",
-  "authors": "650 Industries, Inc.",
-  "homepage": "https://docs.expo.dev/routing/introduction/",
+  "authors": "evanbacon <bacon@expo.io> (https://github.com/EvanBacon)",
+  "homepage": "https://github.com/expo/router#readme",
   "platforms": {
-    "ios": "15.1"
+    "ios": "13.0"
   },
   "swift_versions": "5.4",
   "source": {
-    "git": "https://github.com/expo/expo.git"
+    "git": "https://github.com/expo/router"
   },
   "static_framework": true,
   "dependencies": {
-    "ExpoModulesCore": []
+    "ExpoModulesCore": [
+
+    ]
   },
   "pod_target_xcconfig": {
     "DEFINES_MODULE": "YES",

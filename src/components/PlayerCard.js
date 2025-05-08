@@ -1,9 +1,43 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet, Image } from 'react-native';
 import { normalize, wp, hp } from '@utils/responsive';
 import { colors, fonts, typography, layout } from '@styles/main';
 import AppText from '@components/AppText';
 import Svg, { Path } from 'react-native-svg';
+
+const CornerBorder = () => {
+  const radius = wp(25);
+  const strokeWidth = 1;
+  const size = radius + strokeWidth;
+
+ 
+
+  const d = `
+    M ${size} 0
+    A ${radius} ${radius} 0 0 1 0 ${size}
+  `;
+
+
+  return (
+    <Svg
+      width={size}
+      height={size}
+      style={{
+        position: 'absolute',
+        bottom: 0,
+        right: 0,
+        zIndex: 10,
+      }}
+    >
+      <Path
+        d={d}
+        fill="none"
+        stroke={colors.line}
+        strokeWidth={strokeWidth}
+      />
+    </Svg>
+  );
+};
 
 const Star = () => {
   // 计算五角星的路径
@@ -35,30 +69,15 @@ const Star = () => {
 };
 
 const PlayerCard = ({ nickname, teamName, avatarUrl, teamLogoUrl }) => {
-  console.log('🔍 PlayerCard - 接收到的 props:', {
-    nickname,
-    teamName,
-    avatarUrl,
-    teamLogoUrl
-  });
-
-  // 确保 teamName 是字符串类型
+  const [nicknameHeight, setNicknameHeight] = useState(0);
   const displayTeamName = typeof teamName === 'string' ? teamName : '暂无所属球队';
-
-  // 检查昵称第一个字符是否为中文
-  const isFirstCharChinese = nickname && /[\u4e00-\u9fa5]/.test(nickname[0]);
-
-  // 根据第一个字符类型设置位置
-  const dynamicStyle = {
-    top: isFirstCharChinese ? hp(6) : hp(3),
-  };
 
   return (
     <View style={styles.playerCard}>
       <View style={styles.cardMain}>
         <View style={styles.cardLeft}>
+          <CornerBorder />
           <View style={styles.avatarContainer}>
-            {console.log('🧾 最终头像传入的 uri:', avatarUrl)}
             <Image
               source={{ uri: avatarUrl }}
               style={styles.avatarImage}
@@ -68,8 +87,27 @@ const PlayerCard = ({ nickname, teamName, avatarUrl, teamLogoUrl }) => {
           </View>
           <Star />
         </View>
-        <View style={styles.cardRight}>
-          <AppText style={[styles.playerName, dynamicStyle]} numberOfLines={1}>{nickname || '未设置昵称'}</AppText>
+        <View 
+          style={[styles.cardRight, { paddingTop: 4 }]}
+          onLayout={(e) => {
+            const { height } = e.nativeEvent.layout;
+            setNicknameHeight(height);
+          }}
+        >
+          {(nickname || '未设置昵称').split('').map((char, index) => {
+            const isChinese = /[\u4e00-\u9fa5]/.test(char);
+            return (
+              <AppText
+                key={index}
+                style={[
+                  styles.playerName,
+                  isChinese ? styles.chineseChar : styles.rotatedChar,
+                ]}
+              >
+                {char}
+              </AppText>
+            );
+          })}
         </View>
       </View>
       <View style={styles.cardBottom}>
@@ -117,19 +155,21 @@ const styles = StyleSheet.create({
   cardRight: {
     width: '20%',
     backgroundColor: '#BEBEBE',
-    paddingTop: hp(2),
     alignItems: 'center',
+    position: 'relative',
   },
   playerName: {
     fontSize: typography.size.xl,
     color: colors.textPrimary,
-    transform: [{ rotate: '90deg' }],
-    textAlign: 'center',
-    letterSpacing: wp(0),
     fontFamily: fonts.pixel,
-    width: hp(20),
-    position: 'absolute',
-    right: -hp(7.5),
+    textAlign: 'center',
+  },
+  chineseChar: {
+    lineHeight: typography.size.xl,
+  },
+  rotatedChar: {
+    transform: [{ rotate: '90deg' }],
+    marginBottom: -13,
   },
   avatarContainer: {
     position: 'absolute',

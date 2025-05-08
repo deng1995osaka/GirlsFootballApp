@@ -1,23 +1,26 @@
 {
-  "name": "GirlsFootballApp",
+  "name": "main",
   "expo": {
-    "name": "GirlsFootballApp",
+    "name": "女孩踢球",
     "slug": "GirlsFootballApp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
     "scheme": "girlsfootball",
     "userInterfaceStyle": "automatic",
-
-    "newArchEnabled": true,
-
+   
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.girlsfootball.app",
       "associatedDomains": [
         "applinks:sfgcrobnxslmdhnzwhhm.supabase.co"
       ],
-      "jsEngine": "hermes"
+      "jsEngine": "hermes",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -49,17 +52,14 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router",
       [
-        "expo-splash-screen",
+        "expo-build-properties",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
         }
-      ],
-      "expo-font"
+      ]
     ],
     "experiments": {
       "typedRoutes": true
@@ -71,6 +71,8 @@
       "eas": {
         "projectId": "4bfd4271-4332-4362-8a36-ffdc6339aac8"
       }
-    }
+    },
+    "owner": "addressee3"
+    
   }
 }

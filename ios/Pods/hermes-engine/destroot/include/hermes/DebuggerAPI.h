@@ -22,7 +22,6 @@ namespace hermes {
 namespace vm {
 class CodeBlock;
 class Debugger;
-class Runtime;
 struct DebugCommand;
 class HermesValue;
 } // namespace vm
@@ -172,10 +171,6 @@ class HERMES_EXPORT Command {
   /// frame at index \p frameIndex.
   static Command eval(const String &src, uint32_t frameIndex);
 
-  /// \return a boolean whether this Command was constructed using the static
-  /// eval() method
-  bool isEval();
-
  private:
   friend Debugger;
   explicit Command(::hermes::vm::DebugCommand &&);
@@ -193,8 +188,7 @@ class HERMES_EXPORT Debugger {
   /// if the event observer is deallocated before the Debugger.
   void setEventObserver(EventObserver *observer);
 
-  /// Sets the property %isDebuggerAttached in %DebuggerInternal object. Can be
-  /// called from any thread.
+  /// Sets the property %isDebuggerAttached in %DebuggerInternal object.
   void setIsDebuggerAttached(bool isAttached);
 
   /// Asynchronously triggers a pause. This may be called from any thread. This
@@ -211,16 +205,6 @@ class HERMES_EXPORT Debugger {
 
   /// \return the source map URL for the \p fileId.
   String getSourceMappingUrl(uint32_t fileId) const;
-
-  /// Gets the list of loaded scripts. The order of the scripts in the vector
-  /// will be the same across calls.
-  /// \return list of loaded scripts
-  std::vector<SourceLocation> getLoadedScripts() const;
-
-  /// Gets the current stack trace.
-  /// \return stack trace with call frames if runtime is in the interpreter
-  /// loop, otherwise return no call frames
-  StackTrace captureStackTrace() const;
 
   /// -- Breakpoint Management --
 
@@ -264,10 +248,6 @@ class HERMES_EXPORT Debugger {
   /// \return whether the debugger should pause after a script was loaded.
   bool getShouldPauseOnScriptLoad() const;
 
-  /// \return the thrown value if paused on an exception, or
-  /// jsi::Value::undefined() if not.
-  ::facebook::jsi::Value getThrownValue();
-
  private:
   friend std::unique_ptr<HermesRuntime> hermes::makeHermesRuntime(
       const ::hermes::vm::RuntimeConfig &);
@@ -286,11 +266,10 @@ class HERMES_EXPORT Debugger {
 
   explicit Debugger(
       ::facebook::hermes::HermesRuntime *runtime,
-      ::hermes::vm::Runtime &vmRuntime);
+      ::hermes::vm::Debugger *impl);
 
   ::facebook::hermes::HermesRuntime *const runtime_;
   EventObserver *eventObserver_ = nullptr;
-  ::hermes::vm::Runtime &vmRuntime_;
   ::hermes::vm::Debugger *impl_;
   ProgramState state_;
 };
@@ -420,9 +399,6 @@ class Command {
   static Command eval(const String &src, uint32_t frameIndex) {
     return Command();
   }
-  bool isEval() {
-    return false;
-  }
 
  private:
   Command() {}
@@ -441,12 +417,6 @@ class Debugger {
   String getSourceMappingUrl(uint32_t fileId) const {
     return "";
   };
-  std::vector<SourceLocation> getLoadedScripts() const {
-    return {};
-  }
-  StackTrace captureStackTrace() const {
-    return StackTrace{};
-  }
   BreakpointID setBreakpoint(SourceLocation loc) {
     return 0;
   }
@@ -469,9 +439,6 @@ class Debugger {
   void setShouldPauseOnScriptLoad(bool flag) {}
   bool getShouldPauseOnScriptLoad() const {
     return false;
-  }
-  ::facebook::jsi::Value getThrownValue() {
-    return ::facebook::jsi::Value::undefined();
   }
 
  private:

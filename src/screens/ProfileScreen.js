@@ -52,14 +52,12 @@ const ProfileScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      if (route.params?.shouldRefresh) {
-        console.log('👀 检测到来自编辑页的刷新指令');
-        checkAuthAndLoadProfile(); // 重新加载资料
-      }
+      console.log('👀 Profile tab focused，刷新最新数据');
+      checkAuthAndLoadProfile();
     });
 
     return unsubscribe;
-  }, [navigation, route]);
+  }, [navigation]);
 
   useEffect(() => {
     // 每55分钟刷新一次头像URL
@@ -83,14 +81,6 @@ const ProfileScreen = ({ navigation, route }) => {
       }
     };
   }, [isGuest]);
-
-  useEffect(() => {
-    if (route.params?.shouldRefresh) {
-      loadProfile();
-      // 清除刷新标记
-      navigation.setParams({ shouldRefresh: false });
-    }
-  }, [route.params?.shouldRefresh]);
 
   const checkAuthAndLoadProfile = async () => {
     try {

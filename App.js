@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useRef } from 'react';
 import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text, View, Image, Linking, TouchableOpacity } from 'react-native';
@@ -12,6 +12,7 @@ import { normalize, wp, hp } from './src/utils/responsive';
 import { icons } from './src/constants/icons';
 import Toast, { BaseToast } from 'react-native-toast-message';
 import { toastConfig } from './src/config/toastConfig';
+import { supabase } from '@lib/supabase';
 
 import TeamsScreen from './src/screens/TeamsScreen';
 import NewsScreen from './src/screens/NewsScreen';
@@ -23,7 +24,6 @@ import EditProfileScreen from './src/screens/EditProfileScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import UniformDesignScreen from './src/screens/UniformDesignScreen';
 import EmailVerificationScreen from './src/screens/EmailVerificationScreen';
-import PhoneLogin from './src/screens/PhoneLogin';
 
 // 设置Text组件的默认字体
 Text.defaultProps = Text.defaultProps || {};
@@ -33,6 +33,20 @@ Text.defaultProps.style = {
 };
 
 SplashScreen.preventAutoHideAsync();
+
+// 创建 NavigationService
+const NavigationService = {
+  navigationRef: null,
+  setNavigationRef: (ref) => {
+    NavigationService.navigationRef = ref;
+  },
+  navigate: (name, params) => {
+    NavigationService.navigationRef?.navigate(name, params);
+  },
+  reset: (state) => {
+    NavigationService.navigationRef?.reset(state);
+  }
+};
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -111,7 +125,6 @@ function MainNavigator() {
       }}
     >
       <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="PhoneLogin" component={PhoneLogin} />
       <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} />
       <Stack.Screen name="Tabs" component={TabNavigator} />
       <Stack.Screen name="CreateTeam" component={CreateTeamScreen} />
@@ -129,61 +142,54 @@ function MainNavigator() {
   );
 }
 
-function DeepLinkHandler() {
-  const navigation = useNavigation();
+function RootNavigator() {
+  useEffect(() => {
+    console.log('🔄 设置 auth 状态监听器');
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('🔔 Auth 状态变化:', {
+        event,
+        userId: session?.user?.id,
+        email: session?.user?.email,
+        timestamp: new Date().toISOString()
+      });
+
+      if (event === 'SIGNED_IN' && session?.user) {
+        console.log('✅ 用户登录成功，跳转 Tabs 页面');
+        NavigationService.reset({
+          index: 0,
+          routes: [{ name: 'Tabs' }],
+        });
+      }
+    });
+
+    return () => {
+      console.log('🧹 清理 auth 状态监听器');
+      listener?.subscription.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
-    const handleDeepLink = async (event) => {
-      const url = event?.url;
-      if (!url) return;
-
-      try {
-        const handleUrl = (inputUrl) => {
-          if (inputUrl.includes('auth/verify')) {
-            setTimeout(() => navigation.navigate('Login'), 0);
-          }
-        };
-
-        const subscription = Linking.addEventListener('url', (event) => {
-          handleUrl(event.url);
-        });
-
-        const initialUrl = await Linking.getInitialURL();
-        if (initialUrl) handleUrl(initialUrl);
-
-        await Linking.canOpenURL('girlsfootball://auth/verify');
-        await Linking.canOpenURL('exp://auth/verify');
-
-        handleUrl(url);
-
-        return () => {
-          subscription.remove();
-        };
-      } catch (error) {
-        // 留空处理
+    const handleUrl = (url) => {
+      if (url?.includes('auth/verify')) {
+        NavigationService.navigate('Login');
       }
     };
 
-    const subscription = Linking.addEventListener('url', handleDeepLink);
+    const subscription = Linking.addEventListener('url', (event) => {
+      handleUrl(event.url);
+    });
 
     Linking.getInitialURL().then((url) => {
-      if (url) handleDeepLink({ url });
-    }).catch(() => {});
+      if (url) handleUrl(url);
+    });
 
-    return () => {
-      subscription.remove();
-    };
-  }, [navigation]);
+    return () => subscription.remove();
+  }, []);
 
-  return null;
-}
-
-function RootNavigator() {
   return (
     <PortalProvider>
       <View style={{ flex: 1 }}>
         <MainNavigator />
-        <DeepLinkHandler />
       </View>
     </PortalProvider>
   );
@@ -196,25 +202,22 @@ export default function App() {
 
   const onLayoutRootView = useCallback(async () => {
     if (fontsLoaded || fontError) {
-      // 字体加载完成或出错时，隐藏启动屏幕
       await SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
 
   useEffect(() => {
-    // 如果字体加载出错，打印错误信息
     if (fontError) {
       console.warn('字体加载失败:', fontError);
     }
   }, [fontError]);
 
-  // 如果字体未加载完成且没有错误，保持显示启动屏幕
   if (!fontsLoaded && !fontError) {
     return null;
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={(ref) => NavigationService.setNavigationRef(ref)}>
       <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
         <RootNavigator />
       </View>
@@ -226,3 +229,5 @@ export default function App() {
     </NavigationContainer>
   );
 }
+
+export { NavigationService };

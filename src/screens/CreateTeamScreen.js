@@ -109,7 +109,7 @@ export default function CreateTeamScreen({ navigation, route }) {
         return /^#[0-9A-Fa-f]{6}$/.test(value);
       case 'trainingSessions':
       case 'gamesPlayed':
-        return /^\d+$/.test(value);
+        return value === '' || /^\d+$/.test(value);
       default:
         return value.length > 0;
     }
@@ -140,8 +140,8 @@ export default function CreateTeamScreen({ navigation, route }) {
       court: !formData.court.trim(),
       teamColor: !formData.teamColor.trim(),
       rules: !formData.rules.trim(),
-      trainingSessions: !formData.trainingSessions.trim(),
-      gamesPlayed: !formData.gamesPlayed.trim(),
+      trainingSessions: false,
+      gamesPlayed: false,
       teamLogo: !formData.teamLogo,
       teamUniform: !formData.teamUniform,
     };
@@ -372,7 +372,7 @@ export default function CreateTeamScreen({ navigation, route }) {
                 label="Training Sessions"
                 value={formData.trainingSessions}
                 onChangeText={(text) => handleInputChange('trainingSessions', text.replace(/[^0-9]/g, ''))}
-                placeholder="2024年度球队训练次数？"
+                placeholder="2024年度球队训练次数(选填)"
                 keyboardType="numeric"
                 isFocused={focusedInput === 'trainingSessions'}
                 onFocus={() => setFocusedInput('trainingSessions')}
@@ -384,7 +384,7 @@ export default function CreateTeamScreen({ navigation, route }) {
                 label="Games Played"
                 value={formData.gamesPlayed}
                 onChangeText={(text) => handleInputChange('gamesPlayed', text.replace(/[^0-9]/g, ''))}
-                placeholder="2024年度球队约赛次数？"
+                placeholder="2024年度球队约赛次数(选填)"
                 keyboardType="numeric"
                 isFocused={focusedInput === 'gamesPlayed'}
                 onFocus={() => setFocusedInput('gamesPlayed')}

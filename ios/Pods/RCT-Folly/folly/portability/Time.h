@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,10 @@
 // solve that by pretending we have it here in the header and
 // then enable our implementation on the source side so that
 // gets linked in instead.
-#if defined(__MACH__) && defined(__CLOCK_AVAILABILITY)
+#if __MACH__ &&                                                       \
+        ((!defined(TARGET_OS_OSX) || TARGET_OS_OSX) &&                \
+         (MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_12)) || \
+    (TARGET_OS_IPHONE)
 
 #ifdef FOLLY_HAVE_CLOCK_GETTIME
 #undef FOLLY_HAVE_CLOCK_GETTIME
@@ -35,10 +38,6 @@
 
 #define FOLLY_HAVE_CLOCK_GETTIME 1
 #define FOLLY_FORCE_CLOCK_GETTIME_DEFINITION 1
-
-#else
-
-#define FOLLY_FORCE_CLOCK_GETTIME_DEFINITION 0
 
 #endif
 

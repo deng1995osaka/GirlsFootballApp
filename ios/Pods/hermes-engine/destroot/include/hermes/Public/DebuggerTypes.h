@@ -8,7 +8,6 @@
 #ifndef HERMES_PUBLIC_DEBUGGERTYPES_H
 #define HERMES_PUBLIC_DEBUGGERTYPES_H
 
-#include <cstdint>
 #include <string>
 #include <vector>
 #pragma GCC diagnostic push
@@ -48,10 +47,10 @@ using ScriptID = uint32_t;
 /// file.
 constexpr uint32_t kInvalidLocation = ~0u;
 struct SourceLocation {
-  /// Line in the source. 1 based.
+  /// Line in the source.
   uint32_t line = kInvalidLocation;
 
-  /// Column in the source. 1 based.
+  /// Column in the source.
   uint32_t column = kInvalidLocation;
 
   /// Identifier of the source file.
@@ -120,10 +119,7 @@ enum class PauseReason {
   Breakpoint, /// A breakpoint was hit.
   StepFinish, /// A Step operation completed.
   Exception, /// An Exception was thrown.
-  AsyncTriggerImplicit, /// The Pause is the result of
-                        /// triggerAsyncPause(Implicit).
-  AsyncTriggerExplicit, /// The Pause is the result of
-                        /// triggerAsyncPause(Explicit).
+  AsyncTrigger, /// The Pause is the result of triggerAsyncPause().
   EvalComplete, /// An eval() function finished.
 };
 

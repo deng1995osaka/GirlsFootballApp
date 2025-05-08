@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   TouchableOpacity, 
@@ -15,9 +15,37 @@ const DatePicker = ({ visible, onClose, onSelect, title }) => {
   const [selectedMonth, setSelectedMonth] = useState(1);
   const [selectedDay, setSelectedDay] = useState('skip'); // 默认选中"现在不填"
 
-  const years = Array.from({ length: 25 }, (_, i) => (2025 - i).toString());
-  const months = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
-  const days = ['skip', ...Array.from({ length: 31 }, (_, i) => (i + 1).toString().padStart(2, '0'))];
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const currentDay = now.getDate();
+
+  // 年份最大为今年
+  const years = Array.from({ length: 25 }, (_, i) => (currentYear - i).toString());
+  // 月份：如果选今年，最大为本月，否则1-12
+  const months = Array.from({ length: selectedYear == currentYear ? currentMonth : 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
+  // 日期：如果选今年本月，最大为今天，否则1-31
+  const days = [
+    'skip',
+    ...Array.from({ length: (selectedYear == currentYear && selectedMonth == currentMonth) ? currentDay : 31 }, (_, i) => (i + 1).toString().padStart(2, '0'))
+  ];
+
+  // 联动修正逻辑，防止越界
+  useEffect(() => {
+    // 月份越界
+    if (selectedYear == currentYear && selectedMonth > currentMonth) {
+      setSelectedMonth(currentMonth);
+    }
+    // 日期越界
+    if (
+      selectedYear == currentYear &&
+      selectedMonth == currentMonth &&
+      selectedDay !== 'skip' &&
+      Number(selectedDay) > currentDay
+    ) {
+      setSelectedDay(currentDay.toString().padStart(2, '0'));
+    }
+  }, [selectedYear, selectedMonth]);
 
   const handleConfirm = () => {
     onSelect({

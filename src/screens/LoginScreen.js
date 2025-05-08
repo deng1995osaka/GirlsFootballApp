@@ -28,12 +28,18 @@ import { commonScreenStyles } from '@styles/screenStyles';
 import AppText from '@components/AppText';
 import { DEFAULT_PROFILE } from '@config/profileDefaults';
 import Toast from 'react-native-toast-message';
+import * as WebBrowser from 'expo-web-browser';
+import { makeRedirectUri, startAsync } from 'expo-auth-session';
+import * as Crypto from 'expo-crypto';
+import * as Linking from 'expo-linking';
+import * as AppleAuthentication from 'expo-apple-authentication';
 
 const LoginScreen = ({ route, navigation }) => {
   const [email, setEmail] = useState(route.params?.email || '');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState('login'); // 'login' 或 'register'
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [mode, setMode] = useState('register'); // 修改默认模式为'register'
   const [error, setError] = useState('');
   const isFirstLogin = route.params?.isFirstLogin;
   const [focusedInput, setFocusedInput] = useState(null);
@@ -41,6 +47,20 @@ const LoginScreen = ({ route, navigation }) => {
     email: false,
     password: false
   });
+
+  useEffect(() => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('🔔 Auth 状态变化:', { event, session });
+
+      if (event === 'SIGNED_IN') {
+        navigation.replace('Tabs');
+      }
+    });
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
+  }, []);
 
   const handleEmailChange = (text) => {
     setEmail(text.trim());
@@ -221,6 +241,102 @@ const LoginScreen = ({ route, navigation }) => {
     navigation.replace('Tabs');
   };
 
+  const handleAppleLogin = async () => {
+    try {
+      setAppleLoading(true);
+      
+      // 检查设备是否支持 Apple 登录
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      // 使用获取到的凭证进行 Supabase 登录
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: credential.identityToken,
+      });
+
+      if (error) {
+        console.error('❌ Apple 登录失败:', error);
+        Toast.show({
+          type: 'error',
+          text1: '登录失败',
+          text2: error.message,
+          visibilityTime: 3000,
+          autoHide: true,
+          position: 'top',
+        });
+        return;
+      }
+
+      if (data?.user) {
+        // 检查并创建 profile
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          // 先检查 profile 是否存在
+          const { data: existingProfile, error: checkError } = await supabase
+            .from('profiles')
+            .select()
+            .eq('id', user.id)
+            .single();
+
+          if (checkError && checkError.code !== 'PGRST116') {
+            console.error('检查 profile 失败:', checkError);
+          } else if (!existingProfile) {
+            // 只有在 profile 不存在时才创建
+            const { error: profileError } = await supabase
+              .from('profiles')
+              .upsert([{ 
+                id: user.id, 
+                ...DEFAULT_PROFILE,
+                // 如果有用户信息，添加到 profile 中
+                full_name: credential.fullName?.givenName 
+                  ? `${credential.fullName.givenName} ${credential.fullName.familyName || ''}`
+                  : DEFAULT_PROFILE.full_name,
+                email: credential.email || user.email,
+              }])
+              .select()
+              .single();
+
+            if (profileError) {
+              console.error('创建 profile 失败:', profileError);
+            }
+          }
+        }
+
+        Toast.show({
+          type: 'success',
+          text1: '成功',
+          text2: '登录成功',
+          visibilityTime: 2000,
+          autoHide: true,
+          position: 'top',
+        });
+        navigation.replace('Tabs');
+      }
+    } catch (err) {
+      if (err.code === 'ERR_CANCELED') {
+        // 用户取消了登录
+        console.log('用户取消了 Apple 登录');
+      } else {
+        console.error('❌ Apple 登录异常:', err);
+        Toast.show({
+          type: 'error',
+          text1: '错误',
+          text2: 'Apple 登录失败，请重试',
+          visibilityTime: 3000,
+          autoHide: true,
+          position: 'top',
+        });
+      }
+    } finally {
+      setAppleLoading(false);
+    }
+  };
+
   return (
     <Background>
       <StatusBar barStyle="dark-content" backgroundColor="white" />
@@ -252,7 +368,7 @@ const LoginScreen = ({ route, navigation }) => {
               >
                 <View style={styles.content}>
                   <View style={styles.titleContainer}>
-                    <AppText style={styles.title}>{mode === 'login' ? '★登录★' : '★注册新账号★'}</AppText>
+                    <AppText style={styles.title}>{mode === 'register' ? '★欢迎加入女孩踢球★' : '★登录★'}</AppText>
                   </View>
 
                   {error && (
@@ -304,14 +420,18 @@ const LoginScreen = ({ route, navigation }) => {
                     disabled={loading}
                     style={styles.submitButton}
                   />
+                  {Platform.OS === 'ios' && (
+                    <AppleAuthentication.AppleAuthenticationButton
+                      buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE_OUTLINE}
+                      cornerRadius={100}
+                      style={styles.appleButton}
+                      onPress={handleAppleLogin}
+                      disabled={appleLoading}
+                    />
+                  )}
 
                   <View style={styles.linkButtonsContainer}>
-                    <PixelButton
-                      title="使用短信登录↩"
-                      onPress={() => navigation.navigate('PhoneLogin')}
-                      variant="underline"
-                      status="default"
-                    />
                     {mode === 'login' ? (
                       <PixelButton
                         title="注册新账号↩"
@@ -321,7 +441,7 @@ const LoginScreen = ({ route, navigation }) => {
                       />
                     ) : (
                       <PixelButton
-                        title="返回登录↩"
+                        title="已有账号?去登录↩"
                         onPress={() => setMode('login')}
                         variant="underline"
                         status="default"
@@ -368,7 +488,7 @@ const styles = StyleSheet.create({
     gap: hp(2),
   },
   submitButton: {
-    width: '55%',
+    width: '65%',
     marginTop: hp(2),
   },
   linkButtonsContainer: {
@@ -383,6 +503,11 @@ const styles = StyleSheet.create({
   },
   inputError: {
     borderColor: colors.error,
+  },
+  appleButton: {
+    width: '65%',
+    height: hp(6), 
+    marginTop: hp(2),
   },
 });
 

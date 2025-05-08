@@ -268,7 +268,7 @@ export default function EditProfileScreen({ navigation }) {
       <KeyboardAvoidingView 
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 20}
       >
         <ScrollView 
           style={commonScreenStyles.mainContent}
@@ -276,7 +276,6 @@ export default function EditProfileScreen({ navigation }) {
           keyboardShouldPersistTaps="handled"
         >
           <View style={commonScreenStyles.formContainer}>
-
             {/* 用户唯一识别码 */}
             <FormInput
               label=""
@@ -291,7 +290,6 @@ export default function EditProfileScreen({ navigation }) {
               editable={isFirstEdit}
             />
 
-            
             {/* 昵称 */}
             <FormInput
               label=""
@@ -381,22 +379,19 @@ export default function EditProfileScreen({ navigation }) {
               error={showErrors && errors.avatar}
               errorText="请上传头像"
             />
-
-            
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
 
-      {/* 提交按钮 */}
-      <View style={commonScreenStyles.submitContainer}>
-        <TouchableOpacity 
-          style={commonScreenStyles.submitButton}
-          onPress={handleSubmit}
-          disabled={isLoading}
-        >
-          <AppText style={commonScreenStyles.submitButtonText}>保存</AppText>
-        </TouchableOpacity>
-      </View>
+        <View style={commonScreenStyles.submitContainer}>
+          <TouchableOpacity 
+            style={commonScreenStyles.submitButton}
+            onPress={handleSubmit}
+            disabled={isLoading}
+          >
+            <AppText style={commonScreenStyles.submitButtonText}>保存</AppText>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaViewRN>
   );
 }

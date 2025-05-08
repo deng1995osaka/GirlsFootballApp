@@ -176,8 +176,9 @@ const TeamCard = ({ team, showMenuButton, navigation, onDelete }) => {
   };
 
   const contactDisplay = team.contact ? `${team.platform}@${team.contact}` : '-';
-  const trainingCount = team.training_count || 0;
-  const matchCount = team.match_count || 0;
+  // 训练和约赛次数，未填写时显示“？”
+  const trainingCount = (team.training_count === null || team.training_count === undefined || team.training_count === '') ? '？' : team.training_count;
+  const matchCount = (team.match_count === null || team.match_count === undefined || team.match_count === '') ? '？' : team.match_count;
 
   return (
     <>
@@ -189,12 +190,13 @@ const TeamCard = ({ team, showMenuButton, navigation, onDelete }) => {
         <View style={styles.content}>
           {showMenuButton && (
             <View style={styles.menuContainer}>
-              <TouchableOpacity
-                ref={buttonRef}
-                onPress={handleShowMenu}
-              >
-                <AppText style={styles.menuButtonText}>≡</AppText>
-              </TouchableOpacity>
+              <View ref={buttonRef}>
+                <TouchableOpacity
+                  onPress={handleShowMenu}
+                >
+                  <AppText style={styles.menuButtonText}>≡</AppText>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
           <View style={styles.headerSection}>
