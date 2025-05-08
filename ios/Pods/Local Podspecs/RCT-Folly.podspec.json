@@ -14,9 +14,15 @@
   "module_name": "folly",
   "header_mappings_dir": ".",
   "dependencies": {
-    "boost": [],
-    "DoubleConversion": [],
-    "glog": [],
+    "boost": [
+
+    ],
+    "DoubleConversion": [
+
+    ],
+    "glog": [
+
+    ],
     "fmt": [
       "~> 6.2.1"
     ]
@@ -115,7 +121,9 @@
     {
       "name": "Futures",
       "dependencies": {
-        "libevent": []
+        "libevent": [
+
+        ]
       },
       "pod_target_xcconfig": {
         "HEADER_SEARCH_PATHS": [
